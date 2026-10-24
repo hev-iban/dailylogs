@@ -23,13 +23,13 @@ def test_lifecycle_create_list_edit_list_delete_list(env):
     assert listed.status_code == 200 and listed.json() == []
 
 
-def test_log_and_photo_survive_app_restart(tmp_path):
-    db, uploads = tmp_path / "t.db", tmp_path / "up"
+def test_log_and_photo_survive_app_restart(tmp_path, test_url):
+    uploads = tmp_path / "up"
     data = make_image()
-    with TestClient(create_app(db_path=db, uploads_dir=uploads)) as client:
+    with TestClient(create_app(database_url=test_url, uploads_dir=uploads)) as client:
         created = post(client, [data], description="kept").json()
         before = client.get("/api/logs").json()
-    with TestClient(create_app(db_path=db, uploads_dir=uploads)) as client:
+    with TestClient(create_app(database_url=test_url, uploads_dir=uploads)) as client:
         assert client.get("/api/logs").json() == before == [created]
         r = client.get("/" + created["photos"][0])
         assert r.status_code == 200 and r.content == data

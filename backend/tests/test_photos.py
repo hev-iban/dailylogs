@@ -67,9 +67,9 @@ def test_disk_error_midway_cleans_up_500(env, monkeypatch):
     assert_nothing_stored(db, uploads)
 
 
-def test_missing_uploads_dir_is_created(tmp_path):
+def test_missing_uploads_dir_is_created(tmp_path, test_url):
     uploads = tmp_path / "deep" / "up"
-    app = create_app(db_path=tmp_path / "t.db", uploads_dir=uploads)
+    app = create_app(database_url=test_url, uploads_dir=uploads)
     with TestClient(app) as client:
         uploads.rmdir()
         uploads.parent.rmdir()
@@ -110,9 +110,9 @@ def test_uploads_absolute_path_refused(env, tmp_path):
     assert b"TOPSECRET" not in r.content
 
 
-def test_uploads_dir_created_late_still_served(tmp_path):
+def test_uploads_dir_created_late_still_served(tmp_path, test_url):
     uploads = tmp_path / "late"
-    app = create_app(db_path=tmp_path / "t.db", uploads_dir=uploads)
+    app = create_app(database_url=test_url, uploads_dir=uploads)
     with TestClient(app) as client:
         data = make_image()
         photo = post(client, [data]).json()["photos"][0]
@@ -134,7 +134,7 @@ def test_put_remove_and_add_order_and_disk(env):
     assert photos[3].endswith(".jpg")
     assert client.get("/api/logs").json() == [r.json()]
     logs, prows = rows(db)
-    assert [x[2] for x in sorted(prows, key=lambda x: x[3])] == photos
+    assert [x["path"] for x in sorted(prows, key=lambda x: x["position"])] == photos
 
 
 def test_put_remove_four_add_four_ok(env):

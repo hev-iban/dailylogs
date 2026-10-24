@@ -1,10 +1,9 @@
 """Tests for creating, listing, updating and deleting log entries."""
-import sqlite3
 from pathlib import Path
 
 import pytest
 
-from conftest import make_image, make_log, post, put, rows, snapshot
+from conftest import make_image, make_log, post, put, execute_sql, rows, snapshot
 
 
 SHAPE = {"id", "description", "photos", "created_at", "updated_at"}
@@ -23,8 +22,8 @@ def test_create_ok_response_and_storage(env):
     assert body["photos"][0].startswith("uploads/")
     logs, photos = rows(db)
     assert len(logs) == 1 and len(photos) == 1
-    assert logs[0][1] == "hello" and logs[0][2] == logs[0][3] == body["created_at"]
-    assert photos[0][2] == body["photos"][0]
+    assert logs[0]["description"] == "hello" and logs[0]["created_at"] == logs[0]["updated_at"] == body["created_at"]
+    assert photos[0]["path"] == body["photos"][0]
 
 
 def test_list_empty(env):
@@ -105,8 +104,8 @@ def test_delete_leaves_other_log_untouched(env):
     a = make_log(client, 2)
     b = make_log(client, 2, description="other")
     other_files = {Path(p).name: (uploads / Path(p).name).read_bytes() for p in b["photos"]}
-    logs_b = [x for x in rows(db)[0] if x[0] == b["id"]]
-    photos_b = [x for x in rows(db)[1] if x[1] == b["id"]]
+    logs_b = [x for x in rows(db)[0] if x["id"] == b["id"]]
+    photos_b = [x for x in rows(db)[1] if x["log_id"] == b["id"]]
     assert client.delete(f"/api/logs/{a['id']}").status_code == 204
     assert client.get("/api/logs").json() == [b]
     assert file_bytes(uploads) == other_files
@@ -158,10 +157,7 @@ def test_delete_file_removal_error_still_success(env, monkeypatch):
 def test_delete_log_without_photos_and_twice(env):
     client, db, uploads = env
     log = make_log(client, 1)
-    conn = sqlite3.connect(db)
-    conn.execute("DELETE FROM photos")
-    conn.commit()
-    conn.close()
+    execute_sql(db, "DELETE FROM photos")
     assert client.delete(f"/api/logs/{log['id']}").status_code == 204
     assert client.delete(f"/api/logs/{log['id']}").status_code == 404
     assert rows(db) == ([], [])
@@ -172,9 +168,6 @@ def test_delete_never_removes_outside_uploads(env, tmp_path):
     log = make_log(client, 1)
     victim = tmp_path / "victim.txt"
     victim.write_text("keep")
-    conn = sqlite3.connect(db)
-    conn.execute("UPDATE photos SET path = ?", ("../victim.txt",))
-    conn.commit()
-    conn.close()
+    execute_sql(db, "UPDATE photos SET path = %s", ("../victim.txt",))
     assert client.delete(f"/api/logs/{log['id']}").status_code == 204
     assert victim.read_text() == "keep"

@@ -4,7 +4,6 @@ from pathlib import Path
 from pydantic import BaseModel
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DB_PATH = PROJECT_ROOT / "logs.db"
 DEFAULT_UPLOADS_DIR = PROJECT_ROOT / "uploads"
 # Prefix of the photo paths stored in the DB and returned to clients.
 UPLOADS_URL_PREFIX = "uploads"

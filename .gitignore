@@ -7,11 +7,7 @@ __pycache__/
 .venv/
 venv/
 
-# Your journal data (created at runtime; back it up separately)
-logs.db
-logs.db-journal
-logs.db-wal
-logs.db-shm
+# Your journal photos (created at runtime; back them up separately)
 uploads/
 
 # Local secrets

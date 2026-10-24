@@ -9,7 +9,7 @@ runs locally, so there is no login or logout.
 | Layer | Choice |
 |---|---|
 | Backend | Python, FastAPI (API and request validation), Pillow (image checks) |
-| Database | SQLite (descriptions, timestamps, photo paths) |
+| Database | PostgreSQL (descriptions, timestamps, photo paths) |
 | Photo storage | `uploads/` folder on disk |
 | Frontend | HTML, CSS, JavaScript, talking to the backend over HTTP |
 | Tests | pytest |

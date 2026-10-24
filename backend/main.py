@@ -1,4 +1,5 @@
 """App creation and wiring. Run from backend/: uvicorn main:app"""
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -7,8 +8,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import database
-from models import (DEFAULT_DB_PATH, DEFAULT_UPLOADS_DIR, FRONTEND_DIR,
-                    MAX_REQUEST_BYTES, UPLOADS_URL_PREFIX)
+from models import (DEFAULT_UPLOADS_DIR, FRONTEND_DIR, MAX_REQUEST_BYTES,
+                    UPLOADS_URL_PREFIX)
 from routes import router
 
 
@@ -47,19 +48,29 @@ class BodyLimitMiddleware:
         await self.app(scope, limited_receive, send)
 
 
-def create_app(db_path: Path | None = None, uploads_dir: Path | None = None,
+def _resolve_database_url(database_url: str | None) -> str:
+    url = (database_url if database_url is not None
+           else os.environ.get("DATABASE_URL", "")).strip()
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL is not set. Set it to your PostgreSQL connection string "
+            "before starting the app, e.g. postgresql://postgres@localhost:5432/dailylog")
+    return url
+
+
+def create_app(database_url: str | None = None, uploads_dir: Path | None = None,
                max_request_bytes: int = MAX_REQUEST_BYTES) -> FastAPI:
-    db_path = Path(db_path or DEFAULT_DB_PATH)
     uploads_dir = Path(uploads_dir or DEFAULT_UPLOADS_DIR)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Resolved at startup, not import, so `import main` works without DATABASE_URL.
+        app.state.database_url = _resolve_database_url(database_url)
         uploads_dir.mkdir(parents=True, exist_ok=True)
-        database.init_db(db_path)
+        database.init_db(app.state.database_url)
         yield
 
     app = FastAPI(title="Logs API", lifespan=lifespan)
-    app.state.db_path = db_path
     app.state.uploads_dir = uploads_dir
     app.add_middleware(BodyLimitMiddleware, max_bytes=max_request_bytes)
     app.include_router(router)
