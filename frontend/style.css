@@ -1,0 +1,587 @@
+/* DailyLog: X-inspired single-column feed, light and dark. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --header-bg: rgba(255, 255, 255, 0.94);
+  --text: #0f1419;
+  --muted: #536471;
+  --border: #cfd9de;
+  --border-strong: #536471;
+  --surface: #ffffff;
+  --primary: #1d9bf0;
+  --primary-hover: #4aaef3;
+  --primary-active: #7cc6f7;
+  --on-primary: #0f1419;
+  --danger: #b3122a;
+  --danger-bg: #fdecee;
+  --ghost-hover: rgba(15, 20, 25, 0.1);
+  --ghost-active: rgba(15, 20, 25, 0.2);
+  --danger-hover: rgba(179, 18, 42, 0.12);
+  --danger-active: rgba(179, 18, 42, 0.2);
+  --focus: #0f1419;
+  --header-height: 56px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Dark tokens: system dark unless light was chosen, or dark chosen explicitly.
+   Two selectors cannot share one rule across a media query, so the list appears twice; keep them identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000;
+    --header-bg: rgba(0, 0, 0, 0.92);
+    --text: #e7e9ea;
+    --muted: #8b98a5;
+    --border: #2f3336;
+    --border-strong: #71767b;
+    --surface: #16181c;
+    --primary: #1a8cd8;
+    --primary-hover: #4aaef3;
+    --primary-active: #7cc6f7;
+    --on-primary: #0f1419;
+    --danger: #ff8d96;
+    --danger-bg: #2a1013;
+    --ghost-hover: rgba(231, 233, 234, 0.12);
+    --ghost-active: rgba(231, 233, 234, 0.24);
+    --danger-hover: rgba(255, 141, 150, 0.14);
+    --danger-active: rgba(255, 141, 150, 0.28);
+    --focus: #ffffff;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #000000;
+  --header-bg: rgba(0, 0, 0, 0.92);
+  --text: #e7e9ea;
+  --muted: #8b98a5;
+  --border: #2f3336;
+  --border-strong: #71767b;
+  --surface: #16181c;
+  --primary: #1a8cd8;
+  --primary-hover: #4aaef3;
+  --primary-active: #7cc6f7;
+  --on-primary: #0f1419;
+  --danger: #ff8d96;
+  --danger-bg: #2a1013;
+  --ghost-hover: rgba(231, 233, 234, 0.12);
+  --ghost-active: rgba(231, 233, 234, 0.24);
+  --danger-hover: rgba(255, 141, 150, 0.14);
+  --danger-active: rgba(255, 141, 150, 0.28);
+  --focus: #ffffff;
+}
+
+/* Native controls (file input, textarea, scrollbars) follow an explicit choice. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html {
+  background: var(--bg);
+  scroll-padding-top: calc(var(--header-height) + 16px);
+}
+
+body {
+  max-width: 600px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.4;
+  border-inline: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+/* Header */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  min-height: var(--header-height);
+  padding: 0 16px;
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.theme-toggle {
+  flex: none;
+  min-width: 36px;
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+  font-size: 18px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+h2 {
+  margin: 0 0 12px;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+/* New log form */
+#new-log,
+#logs > h2,
+#empty-message,
+#load-error {
+  padding-inline: 16px;
+}
+
+#new-log {
+  padding-block: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+#logs > h2 {
+  margin: 0;
+  padding-block: 16px 4px;
+}
+
+#log-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+#log-form label {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+#log-form button {
+  align-self: flex-end;
+  margin-top: 8px;
+}
+
+/* Text fields and file inputs */
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  font: inherit;
+  resize: vertical;
+}
+
+input[type="file"] {
+  width: 100%;
+  min-height: 40px;
+  max-width: 100%;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+input[type="file"]::file-selector-button {
+  min-height: 32px;
+  margin-right: 10px;
+  padding: 4px 14px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+input[type="checkbox"] {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+/* Buttons */
+button {
+  min-width: 72px;
+  min-height: 36px;
+  padding: 6px 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 80ms, filter 80ms, transform 80ms;
+}
+
+#save-button,
+.edit-save-button {
+  min-width: 104px;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.edit-button,
+.edit-cancel-button {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.delete-button {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.delete-button {
+  min-width: 100px;
+}
+
+/* Pressed: immediate, no transition delay. */
+#save-button:active,
+.edit-save-button:active {
+  background: var(--primary-active);
+}
+
+.edit-button:active,
+.edit-cancel-button:active {
+  background: var(--ghost-active);
+}
+
+.delete-button:active {
+  background: var(--danger-active);
+}
+
+.theme-toggle:active {
+  background: var(--ghost-active);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.95);
+  transition-duration: 0s;
+}
+
+/* Hover: pointer devices only; controls are already distinct at rest. */
+@media (hover: hover) and (pointer: fine) {
+  #save-button:hover,
+  .edit-save-button:hover {
+    background: var(--primary-hover);
+  }
+
+  .edit-button:hover,
+  .edit-cancel-button:hover {
+    background: var(--ghost-hover);
+  }
+
+  .delete-button:hover {
+    background: var(--danger-hover);
+  }
+
+  .theme-toggle:hover {
+    background: var(--ghost-hover);
+  }
+
+  /* Keep :active visibly different from :hover. */
+  #save-button:active:hover,
+  .edit-save-button:active:hover {
+    background: var(--primary-active);
+  }
+
+  .edit-button:active:hover,
+  .edit-cancel-button:active:hover {
+    background: var(--ghost-active);
+  }
+
+  .delete-button:active:hover {
+    background: var(--danger-active);
+  }
+
+  .theme-toggle:active:hover {
+    background: var(--ghost-active);
+  }
+
+  input[type="file"]::file-selector-button:hover {
+    background: var(--ghost-hover);
+  }
+
+  textarea:hover {
+    border-color: var(--text);
+  }
+
+}
+
+/* Focus: two-tone ring (outline plus offset gap showing the page color). */
+:is(button, textarea, input):focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+input[type="file"]:focus-visible {
+  outline-offset: 2px;
+}
+
+/* Disabled (not loading): dimmed and not clickable. */
+button:disabled:not([aria-busy="true"]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Loading: full-strength label plus a progress ring. */
+button[aria-busy="true"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 1;
+  cursor: progress;
+}
+
+button[aria-busy="true"]::after {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Errors: red, boxed, with a glyph and text prefix so grayscale still reads. */
+#form-error,
+.edit-error,
+.delete-error,
+#load-error {
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-left-width: 5px;
+  border-radius: 8px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+#load-error {
+  margin: 12px 16px;
+  padding-inline: 12px;
+}
+
+#form-error::before,
+.edit-error::before,
+.delete-error::before,
+#load-error::before {
+  content: "\26A0\FE0E  Error: ";
+  font-weight: 800;
+}
+
+/* Description limit: counter plus a text message (not color alone). */
+.char-count {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: right;
+}
+
+.char-count.over-limit {
+  color: var(--danger);
+  font-weight: 800;
+}
+
+.limit-status {
+  margin: 0;
+}
+
+.limit-message {
+  margin: 0;
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.limit-message::before {
+  content: "\26A0\FE0E  ";
+}
+
+.edit-form > .char-count,
+.edit-form > .limit-status {
+  flex: 1 1 100%;
+  margin: -6px 0 0;
+}
+
+#empty-message {
+  margin: 0;
+  padding-block: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Feed */
+#log-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.log {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.log-date {
+  display: block;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.log-description {
+  margin: 4px 0 0;
+  font-size: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.log-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.log-photos:empty {
+  display: none;
+}
+
+.log-photos img,
+.edit-photo img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.log-photos img {
+  aspect-ratio: 4 / 3;
+}
+
+.log-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.log > .delete-error {
+  margin-bottom: 0;
+}
+
+/* Inline edit form */
+.edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.edit-form > textarea,
+.edit-form > input[type="file"],
+.edit-form > .edit-error {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.edit-photo {
+  display: flex;
+  flex: 1 1 calc(50% - 6px);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px;
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edit-photo img {
+  flex: 1 1 100%;
+  height: 120px;
+}
+
+/* Selected for removal: dimmed image, red dashed border, extra text. */
+.edit-photo:has(input:checked) {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  border-style: dashed;
+  color: var(--danger);
+}
+
+.edit-photo:has(input:checked) img {
+  opacity: 0.4;
+}
+
+.edit-photo:has(input:checked)::after {
+  content: "\2014 will be removed";
+  font-weight: 800;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+  }
+
+  /* Static ring instead of a spinner. */
+  button[aria-busy="true"]::after {
+    animation: none;
+    border-style: dotted;
+    border-top-color: currentColor;
+  }
+}
+
+@media (forced-colors: active) {
+  button[aria-busy="true"]::after {
+    border-color: ButtonText;
+  }
+}

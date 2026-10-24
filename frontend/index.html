@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DailyLog</title>
+  <!-- Inline on purpose: sets the saved theme before first paint so there is no flash of the other theme. -->
+  <script>
+    try {
+      var savedTheme = localStorage.getItem("dailylog-theme");
+      if (savedTheme === "light" || savedTheme === "dark") {
+        document.documentElement.setAttribute("data-theme", savedTheme);
+      }
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>DailyLog</h1>
+    <button type="button" id="theme-toggle" class="theme-toggle"><span id="theme-icon" aria-hidden="true"></span></button>
+  </header>
+
+  <main>
+    <section id="new-log">
+      <h2>New log</h2>
+      <form id="log-form" enctype="multipart/form-data">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" rows="4" required></textarea>
+        <p id="description-count" class="char-count">0/200</p>
+        <div class="limit-status" aria-live="polite"><p id="description-limit" class="limit-message" hidden></p></div>
+
+        <label for="photos">Photos (1 to 5, JPG, PNG or WEBP, max 5 MB each)</label>
+        <input id="photos" name="photos" type="file"
+               accept=".jpg,.jpeg,.png,.webp" multiple required>
+
+        <p id="form-error" role="alert" hidden></p>
+
+        <button type="submit" id="save-button">Save</button>
+      </form>
+    </section>
+
+    <section id="logs">
+      <h2>All logs</h2>
+      <ul id="log-list"></ul>
+      <p id="empty-message" hidden>No logs yet.</p>
+    </section>
+  </main>
+
+  <template id="log-template">
+    <li class="log">
+      <time class="log-date"></time>
+      <p class="log-description"></p>
+      <div class="log-photos"></div>
+      <div class="log-actions">
+        <button type="button" class="edit-button">Edit</button>
+        <button type="button" class="delete-button">Delete</button>
+      </div>
+    </li>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

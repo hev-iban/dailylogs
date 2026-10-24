@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# Your journal data (created at runtime; back it up separately)
+logs.db
+logs.db-journal
+logs.db-wal
+logs.db-shm
+uploads/
+
+# Local secrets
+.env
+
+# Claude Code tooling (a separate git repository)
+.claude/
+
+# Editors and OS files
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
