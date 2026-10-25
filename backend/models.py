@@ -1,7 +1,8 @@
 """Data shapes and constants for the logs API."""
 from pathlib import Path
+from typing import Annotated
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_UPLOADS_DIR = PROJECT_ROOT / "uploads"
@@ -28,3 +29,10 @@ class LogOut(BaseModel):
     photos: list[str]
     created_at: str
     updated_at: str
+
+
+class DescriptionIn(BaseModel):
+    """Description rules: a real string, trimmed first, then 1..MAX_DESCRIPTION_CHARS code points."""
+    description: Annotated[str, StringConstraints(
+        strict=True, strip_whitespace=True,
+        min_length=1, max_length=MAX_DESCRIPTION_CHARS)]
