@@ -1,0 +1,10 @@
+.git
+.gitignore
+.github
+.venv
+.claude
+.env
+.pytest_cache
+__pycache__
+*.pyc
+uploads

@@ -120,8 +120,25 @@ frontend/
 uploads/            Stored photos (created at runtime)
 requirements.txt    Python dependencies
 specs.md            Specification
-Dockerfile          Not set up yet
-compose.yaml        Not set up yet
+Dockerfile          Builds the API image (Python 3.12 slim, uvicorn on port 8000)
+compose.yaml        Runs the API and Postgres 17 with volumes for data and photos
 ```
+
+## Run with Docker
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:8080. Change the host port with `API_PORT` (for example
+`API_PORT=9000 docker compose up`). Postgres is not published to the host, so it does not
+clash with a local Postgres or dev server.
+
+Entries and photos live in the named volumes `pgdata` and `uploads` and survive
+`docker compose down` and restarts. `docker compose down -v` deletes them.
+
+The database user, password, and name default to dev-only values; override them with
+`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` in the shell or a git-ignored `.env`.
+Set them before the first start, since Postgres keeps the original password in the volume.
 
 
