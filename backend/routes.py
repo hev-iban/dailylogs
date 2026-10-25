@@ -20,25 +20,27 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 from PIL import Image
+from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
 import database
 from models import (ALLOWED_EXTENSIONS, ALLOWED_FORMATS, MAX_DESCRIPTION_CHARS,
                     MAX_PHOTO_BYTES, MAX_PHOTOS, MIN_PHOTOS, UPLOADS_URL_PREFIX,
-                    LogOut)
+                    DescriptionIn, LogOut)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
 
 
 def _validate_description(value) -> str:
-    if not isinstance(value, str) or not value.strip():
+    """Validate with DescriptionIn; map its errors to the contract's plain-string details."""
+    try:
+        return DescriptionIn.model_validate({"description": value}).description
+    except ValidationError as exc:
+        if any(e["type"] == "string_too_long" for e in exc.errors()):
+            raise HTTPException(
+                422, f"description must be at most {MAX_DESCRIPTION_CHARS} characters")
         raise HTTPException(422, "description is required and cannot be blank")
-    text = value.strip()
-    if len(text) > MAX_DESCRIPTION_CHARS:
-        raise HTTPException(
-            422, f"description must be at most {MAX_DESCRIPTION_CHARS} characters")
-    return text
 
 
 def _extension(filename: str) -> str:
