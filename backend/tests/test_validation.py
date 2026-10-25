@@ -1,12 +1,11 @@
 """Tests for description, format, size and other invalid-data rules."""
-import sqlite3
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 import models
-from conftest import assert_nothing_stored, make_image, make_log, post, put, snapshot
+from conftest import assert_nothing_stored, execute_sql, make_image, make_log, post, put, snapshot
 from main import create_app
 
 
@@ -104,11 +103,8 @@ def test_exact_5mib_ok_and_one_more_413(env):
     assert post(client, [padded_png(MAX)]).status_code == 201
     for p in uploads.iterdir():
         p.unlink()
-    conn = sqlite3.connect(db)
-    conn.execute("DELETE FROM photos")
-    conn.execute("DELETE FROM logs")
-    conn.commit()
-    conn.close()
+    execute_sql(db, "DELETE FROM photos")
+    execute_sql(db, "DELETE FROM logs")
     assert post(client, [padded_png(MAX + 1)]).status_code == 413
     assert_nothing_stored(db, uploads)
 
@@ -125,9 +121,9 @@ def test_body_limit_413_declared(env):
     assert_nothing_stored(db, uploads)
 
 
-def test_body_limit_413_streamed_without_content_length(tmp_path):
+def test_body_limit_413_streamed_without_content_length(tmp_path, test_url):
     uploads = tmp_path / "up"
-    app = create_app(db_path=tmp_path / "t.db", uploads_dir=uploads, max_request_bytes=2000)
+    app = create_app(database_url=test_url, uploads_dir=uploads, max_request_bytes=2000)
 
     def gen():
         yield b"--b\r\n"
@@ -260,10 +256,10 @@ def test_put_5mib_boundary(env):
     assert snapshot(db, uploads) == before
 
 
-def test_put_body_limit_413(tmp_path):
+def test_put_body_limit_413(tmp_path, test_url):
     uploads = tmp_path / "up"
-    db = tmp_path / "t.db"
-    app = create_app(db_path=db, uploads_dir=uploads, max_request_bytes=5000)
+    db = test_url
+    app = create_app(database_url=test_url, uploads_dir=uploads, max_request_bytes=5000)
     with TestClient(app) as client:
         log = post(client, [make_image()]).json()
         before = snapshot(db, uploads)

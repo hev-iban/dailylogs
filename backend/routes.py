@@ -91,7 +91,7 @@ def _detect_extensions(blobs: list[bytes]) -> list[str]:
     return exts
 
 
-def _store(db_path, uploads_dir, description, blobs, exts) -> dict:
+def _store(database_url, uploads_dir, description, blobs, exts) -> dict:
     """Write files then insert the row; on any failure remove every file written."""
     written = []
     try:
@@ -106,7 +106,7 @@ def _store(db_path, uploads_dir, description, blobs, exts) -> dict:
             names.append(f"{UPLOADS_URL_PREFIX}/{name}")
         # Always server-generated; fixed microsecond precision keeps ordering uniform.
         now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
-        with closing(database.connect(db_path)) as conn:
+        with closing(database.connect(database_url)) as conn:
             try:
                 result = database.insert_log(conn, description, names, now)
                 conn.commit()
@@ -123,14 +123,14 @@ def _store(db_path, uploads_dir, description, blobs, exts) -> dict:
         raise
 
 
-def _update(db_path, uploads_dir, log_id, description, remove, blobs, exts) -> dict:
+def _update(database_url, uploads_dir, log_id, description, remove, blobs, exts) -> dict:
     """Validate against the stored photos, write new files, commit, then delete old files.
 
     Old files go only after the commit; on any failure the new files are removed.
     """
     written = []
     try:
-        with closing(database.connect(db_path)) as conn:
+        with closing(database.connect(database_url)) as conn:
             current = database.get_log(conn, log_id)
             if current is None:
                 raise HTTPException(404, "log not found")
@@ -174,13 +174,13 @@ def _update(db_path, uploads_dir, log_id, description, remove, blobs, exts) -> d
     return result
 
 
-def _delete(db_path, uploads_dir, log_id) -> None:
+def _delete(database_url, uploads_dir, log_id) -> None:
     """Delete the rows and commit, then remove the photo files.
 
     File removal is best effort: a missing file or an OS error is logged and never
     undoes the delete. Only files directly inside uploads_dir are ever removed.
     """
-    with closing(database.connect(db_path)) as conn:
+    with closing(database.connect(database_url)) as conn:
         try:
             paths = database.delete_log(conn, log_id)
             if paths is None:
@@ -204,20 +204,20 @@ def _delete(db_path, uploads_dir, log_id) -> None:
             logger.exception("could not remove %s", p)
 
 
-def _exists(db_path, log_id) -> bool:
-    with closing(database.connect(db_path)) as conn:
+def _exists(database_url, log_id) -> bool:
+    with closing(database.connect(database_url)) as conn:
         return database.get_log(conn, log_id) is not None
 
 
-def _list(db_path) -> list[dict]:
-    with closing(database.connect(db_path)) as conn:
+def _list(database_url) -> list[dict]:
+    with closing(database.connect(database_url)) as conn:
         return database.list_logs(conn)
 
 
 @router.get("/logs", response_model=list[LogOut])
 async def list_logs(request: Request):
     try:
-        return await run_in_threadpool(_list, request.app.state.db_path)
+        return await run_in_threadpool(_list, request.app.state.database_url)
     except Exception:
         logger.exception("list_logs failed")
         return JSONResponse({"detail": "internal server error"}, status_code=500)
@@ -232,7 +232,7 @@ async def create_log(request: Request):
             blobs = await _read_all(files)
         exts = await run_in_threadpool(_detect_extensions, blobs)
         return await run_in_threadpool(
-            _store, request.app.state.db_path, request.app.state.uploads_dir,
+            _store, request.app.state.database_url, request.app.state.uploads_dir,
             description, blobs, exts)
     except HTTPException:
         raise
@@ -245,7 +245,7 @@ async def create_log(request: Request):
 async def delete_log(log_id: int, request: Request):
     try:
         await run_in_threadpool(
-            _delete, request.app.state.db_path, request.app.state.uploads_dir, log_id)
+            _delete, request.app.state.database_url, request.app.state.uploads_dir, log_id)
         return Response(status_code=204)
     except HTTPException:
         raise
@@ -257,7 +257,7 @@ async def delete_log(log_id: int, request: Request):
 @router.put("/logs/{log_id}", response_model=LogOut)
 async def update_log(log_id: int, request: Request):
     try:
-        if not await run_in_threadpool(_exists, request.app.state.db_path, log_id):
+        if not await run_in_threadpool(_exists, request.app.state.database_url, log_id):
             raise HTTPException(404, "log not found")
         async with request.form() as form:
             description = _validate_description(form.get("description"))
@@ -268,7 +268,7 @@ async def update_log(log_id: int, request: Request):
             blobs = await _read_all(files)
         exts = await run_in_threadpool(_detect_extensions, blobs)
         return await run_in_threadpool(
-            _update, request.app.state.db_path, request.app.state.uploads_dir,
+            _update, request.app.state.database_url, request.app.state.uploads_dir,
             log_id, description, set(remove), blobs, exts)
     except HTTPException:
         raise
