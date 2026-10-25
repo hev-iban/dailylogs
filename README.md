@@ -8,8 +8,11 @@ See [specs.md](specs.md) for the full specification, validation rules, and API.
 
 ## Requirements
 
-- Python 3.10 or newer
+- Python 3.12 (the version CI and the Docker image use)
 - PostgreSQL (the app and the tests each use their own database)
+
+Or only Docker: `docker compose up` runs the app with its own Postgres (see
+[Run with Docker](#run-with-docker)).
 
 ## Setup
 
@@ -94,6 +97,9 @@ TEST_DATABASE_URL=postgresql://postgres@localhost:5432/dailylog_test python -m p
 The tests use the `_test` database and a temporary uploads folder, so they never touch your real entries.
 A guard in `conftest.py` fails the run if your real `uploads/` change.
 
+GitHub Actions runs the same suite on pushes to `main` and on pull requests
+(`.github/workflows/tests.yml`).
+
 | File | Covers |
 |---|---|
 | `conftest.py` | Shared fixtures, test client, test database safety check and wipe, uploads setup |
@@ -102,6 +108,7 @@ A guard in `conftest.py` fails the run if your real `uploads/` change.
 | `test_logs.py` | Creating, listing, updating and deleting entries |
 | `test_photos.py` | Photo uploads, file paths, image serving, multiple photos |
 | `test_validation.py` | Descriptions, formats, file sizes, invalid image data |
+| `test_description_model.py` | The Pydantic description model: trimming, character counting, error messages |
 | `test_database.py` | PostgreSQL persistence, ordering, rollback, missing `DATABASE_URL`, log and photo relationships |
 
 ## Project structure
@@ -111,7 +118,7 @@ backend/
   main.py           App setup: serves the page, static files, uploads, and the API
   routes.py         API endpoints and validation (/api/logs)
   database.py       PostgreSQL schema and queries
-  models.py         Limits, paths, and the response model
+  models.py         Limits, paths, the description input model, and the response model
   tests/            pytest suite (see above)
 frontend/
   index.html        Web page
@@ -122,6 +129,9 @@ requirements.txt    Python dependencies
 specs.md            Specification
 Dockerfile          Builds the API image (Python 3.12 slim, uvicorn on port 8000)
 compose.yaml        Runs the API and Postgres 17 with volumes for data and photos
+.dockerignore       Keeps .venv, .git, uploads and secrets out of the image
+.github/workflows/
+  tests.yml         CI: runs pytest against a Postgres 17 service container
 ```
 
 ## Run with Docker
