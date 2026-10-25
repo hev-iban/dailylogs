@@ -1,0 +1,52 @@
+<spec>
+  <user_stories>
+    <story>As the owner, after upgrading fastapi the suite still passes (136 tests) and the 133 deprecation warnings (132 httpx "app shortcut", 1 anyio BlockingPortal alias) no longer appear in CI or locally.</story>
+    <story>As the owner, requirements.txt stays exact-pinned, installs cleanly on Python 3.12, and I get a justification for every pin that changed.</story>
+  </user_stories>
+
+  <acceptance_criteria>
+    <criterion n="1" area="target pin">requirements.txt line `fastapi==0.110` becomes `fastapi==0.162.0` (latest on PyPI per the request), or a lower exact version only if the implementer documents why 0.162.0 failed (install conflict or a test failure not fixable without app/test changes). Observable: `pip show fastapi` in the verification venv equals the pinned version.</criterion>
+    <criterion n="2" area="other pins">Other lines change only when required, each with a one-line reason in the report: (a) pip reports a resolver conflict with the new fastapi/starlette (for example uvicorn, python-multipart or pydantic bounds); (b) the warnings persist after the fastapi bump and the cause is an old pin. Expected candidate: `httpx==0.27` may need raising if the new starlette TestClient requires a newer httpx; `python-multipart==0.0.9` likely needs raising because current starlette expects the `python_multipart` import name. Pins not forced to change (pillow, pytest, psycopg[binary]==3.3.6) stay as is. All lines remain `name==version` exact pins. Transitive packages (starlette, anyio, pydantic) are not added to the file unless a version cannot otherwise be controlled, and that is justified.</criterion>
+    <criterion n="3" area="clean install">In a brand-new Python 3.12 venv created in the scratchpad (not the user's .venv), `pip install -r requirements.txt` exits 0, and `pip check` reports no broken requirements.</criterion>
+    <criterion n="4" area="tests">From `backend`, with TEST_DATABASE_URL=postgresql://postgres@localhost:5432/dailylog_test and DATABASE_URL unset, `python -m pytest -q tests` in that venv reports 136 passed, 0 failed, 0 errors, with Linux-equivalent behavior. On Windows the single known failure (criterion 7) is the only permitted deviation; it is then reported as 135 passed + 1 known failure, and the implementer states that CI (Linux) is expected to give 136 passed. If a Linux/WSL/container run is not available, this is reported as not run, not assumed.</criterion>
+    <criterion n="5" area="warnings gone">The run `python -m pytest -q tests -W default` (or the default warnings summary) is captured to a file; grepping it for "app' shortcut", "BlockingPortal" and "DeprecationWarning" yields zero hits attributable to starlette/httpx/anyio. The report states the total warnings count (expected 0, or any remaining warnings are listed verbatim with their origin and judged unrelated).</criterion>
+    <criterion n="6" area="no hiding, no weakening">No `filterwarnings`, `-W ignore`, `-p no:warnings`, `warnings.filterwarnings`/`simplefilter` or pytest.ini/pyproject/conftest setting that suppresses warnings is added. No test is deleted, skipped, xfailed, loosened (assertions, status codes, parametrization) or renamed to reach 136. The test count stays 136. `git diff` is expected to touch only requirements.txt; app code (backend/main.py, backend/routes.py, backend/models.py) and tests change only if the upgrade breaks them, with the minimal fix and a stated reason per hunk. Areas to watch because of API changes between 0.110 and 0.162: StaticFiles (traversal handling, check_dir=False mount in main.py), UploadFile/multipart parsing (routes.py imports starlette.datastructures.UploadFile and uses list file fields plus isinstance checks, and validation error shapes/status codes for missing or invalid form fields), lifespan handling in create_app, exception handlers and 422 response bodies, and TestClient usage with `with TestClient(app)` in conftest and tests.</criterion>
+    <criterion n="7" area="Windows-only known failure">`tests/test_photos.py::test_uploads_traversal_refused[/uploads/....//secret.txt]` fails on Windows with Starlette StaticFiles commonpath "Paths don't have the same drive". It is out of scope: do not fix, skip or xfail it. The report states whether its outcome (pass/fail and error message) differs before vs after the upgrade on Windows. It must pass on Linux-equivalent behavior.</criterion>
+    <criterion n="8" area="safety">Do not modify the user's .venv. Use a fresh venv under C:\Users\Ivan\AppData\Local\Temp\claude\C--Users-Ivan-Desktop-A-Finals\b768432a-9d47-4021-84b7-340b256539be\scratchpad. Only the `dailylog_test` database on localhost:5432 is used; never connect to `dailylog`, never create or drop databases, never touch `logs.db` or `uploads/`, never use port 8000 (any temporary server uses another port and is stopped afterward). No git commit or push; the user commits. The `.github/workflows/tests.yml` file is not modified (it already runs `pip install -r requirements.txt` and `python -m pytest -q tests` on 3.12).</criterion>
+  </acceptance_criteria>
+
+  <out_of_scope>
+    <item>Fixing the Windows-only StaticFiles failure.</item>
+    <item>Refactors, new features, README changes, CI workflow changes, committing or pushing.</item>
+    <item>Upgrading pillow, pytest or psycopg unless forced by criterion 2.</item>
+  </out_of_scope>
+
+  <assumptions>
+    <assumption>Target is fastapi==0.162.0 (latest per the request). The implementer must confirm it exists and installs on Python 3.12 (for example `pip index versions fastapi` or a dry-run install) before pinning; I could not run pip.</assumption>
+    <assumption>The warnings come from the old starlette 0.36.3 TestClient (httpx `app=` shortcut and anyio BlockingPortal alias); a newer starlette fixes both, possibly together with a newer httpx and anyio. Which extra pins are needed is determined empirically, not assumed.</assumption>
+    <assumption>Current fastapi may require a newer pydantic or python-multipart than the ones resolved today; pip's resolver in the fresh venv is the source of truth.</assumption>
+    <assumption>Zero application/test code changes is the expected outcome; any change is an exception to be justified.</assumption>
+  </assumptions>
+
+  <edge_cases>
+    <case>Old pinned httpx/uvicorn/python-multipart conflict with the new fastapi: pip fails or backtracks; raise only the conflicting pin to the minimal compatible exact version.</case>
+    <case>New starlette changes multipart limits, 422 detail shapes, or StaticFiles path handling, causing a real test failure: fix minimally in app code if it is a genuine behavior change, never by editing the assertion to fit.</case>
+    <case>A different, new warning appears after the upgrade (for example a pydantic or python-multipart deprecation): report it verbatim; do not suppress it.</case>
+    <case>anyio is unpinned and floats; the verification run records the resolved anyio, starlette, httpx and pydantic versions in the report for reproducibility.</case>
+  </edge_cases>
+
+  <risks>
+    <risk severity="medium">A jump of about 50 minor versions may change StaticFiles or multipart behavior and break tests, forcing app changes beyond the "zero code" goal.</risk>
+    <risk severity="low">Windows cannot confirm Linux behavior, so the 136-pass claim for CI rests on the Linux-equivalent reasoning unless WSL or a container is available.</risk>
+    <risk severity="low">Transitive versions float (starlette, anyio), so CI could later resolve differently from the verified venv.</risk>
+  </risks>
+
+  <dependencies>
+    <dependency>PyPI access from the scratchpad venv; Python 3.12 interpreter; local Postgres on localhost:5432 with the dailylog_test database already present.</dependency>
+    <dependency>Files: requirements.txt (edited); backend/main.py, backend/routes.py, backend/models.py, backend/tests/* (read, edited only if forced).</dependency>
+  </dependencies>
+
+  <self_critique>
+    Story 1 is covered by criteria 4-5, story 2 by 1-3. Every criterion is checkable via pip output, pytest output or git diff. The biggest uncertainty is the exact set of secondary pins and whether 0.162.0 behaves the same under StaticFiles and multipart; both are settled by the fresh-venv run. No blocking ambiguity, so no clarifications.
+  </self_critique>
+</spec>

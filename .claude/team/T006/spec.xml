@@ -1,0 +1,68 @@
+<spec>
+  <user_stories>
+    - As the user, I click Edit on a post and change its description.
+    - As the user, I remove some existing photos and add new ones in the same edit, keeping 1-5 photos.
+    - As the user, I see the server's validation message if the edit is rejected, and my input is kept so I can fix it.
+    - As the user, I can cancel an edit and get the normal view back unchanged.
+  </user_stories>
+  <acceptance_criteria>
+    Backend: PUT /api/logs/{id}, multipart
+    1. Valid PUT with description, 0..n new "photos" files, and 0..n repeated "remove_photos" returns 200 with the updated log in the existing shape {id, description, photos, created_at, updated_at}. Pass: fields present and values reflect the edit.
+    2. Description is required and non-blank under the same rules as create. Missing or whitespace-only gives 422; log, photos and disk are unchanged.
+    3. Final photo count (existing - removed + added) must be 1..5. 0 or 6+ gives 422 with no change. Removing 4 of 5 and adding 4 succeeds. Keeping 5 and adding 1 gives 422.
+    4. Each new file gets the same validation as create (format by extension and real content, 5 MiB max with exactly 5 MiB accepted). Invalid gives the same status as create (422; 413 for oversize photo or oversize body). One bad file rejects the whole request.
+    5. A remove_photos value that is not one of this log's photo paths (nonexistent, another log's photo, malformed or traversal string) gives 422 with no change, and the other log's files are untouched.
+    6. Unknown log id gives 404, and no files are written or left behind. Unexpected internal failure gives 500 with the log, photos and disk unchanged.
+    7. On success: created_at is unchanged, updated_at is set to now (greater than the previous value, same fixed-microsecond UTC format), kept photos keep their relative order, new photos are appended in upload order, and a subsequent GET /api/logs returns the same data.
+    8. On success the removed photos' files are deleted from disk and the new files exist in the uploads dir with unique generated names. A removed photo whose file is already missing on disk does not cause failure.
+    9. On any failure, the DB row, photos rows, and the set of files in uploads dir are identical to before, and no new files are left behind.
+    10. The same path listed twice in remove_photos is handled without error or double-count (treated as one removal).
+    11. A PUT can change only the description (no removes, no adds) and succeeds.
+    12. All 70 existing tests still pass. New backend tests cover each rule above, including file-on-disk effects, using temp db and uploads paths only. No __pycache__ or .pytest_cache is left behind.
+    Frontend (verifiable by real clicks in headless Chrome via CDP)
+    13. Clicking a post's Edit button replaces that post's normal view with an inline form containing: a textarea pre-filled with the current description, each existing photo displayed with a "Remove" checkbox (unchecked), a multiple file input with the same accept list as the create form, Save and Cancel buttons, and an empty error area. Other posts are unaffected (or only one post is in edit mode; see assumptions).
+    14. Changing the textarea and clicking Save sends a PUT to /api/logs/{id}; on 200 the list reloads and the post shows the new description and a changed updated state, with no edit form visible.
+    15. Checking Remove on a photo and/or choosing new files, then Save, sends those as remove_photos and photos; after reload the post shows exactly the expected photos (removed gone, new present).
+    16. On a server error (for example blank description, or removing all photos with none added) the API's detail message appears in that post's error area, the edit form stays open, and the textarea text, checkbox states and any entered values are preserved. No list reload loses the edit state.
+    17. Cancel restores the normal view of that post with the original description and photos, and sends no network request. Edits typed before Cancel are discarded.
+    18. The create form and its behavior still work after this change (create, error display, reset, reload).
+    19. User-supplied text (descriptions, filenames, error messages) is only inserted via textContent or value, never innerHTML. A description such as "&lt;img src=x onerror=...&gt;" shows as literal text in both the view and the edit textarea, and executes nothing.
+  </acceptance_criteria>
+  <assumptions>
+    - Only existing files are edited: backend/routes.py, database.py, models.py if needed, tests/test_logs.py, frontend/app.js, and index.html only if strictly needed. No new files. style.css stays empty.
+    - Status codes and detail format mirror create: FastAPI-style JSON with a "detail" field.
+    - Description trimming and any max length follow whatever create does.
+    - Edit mode: the implementer chooses whether one or several posts can be in edit mode at once, and records the choice. Verification must accept either.
+    - Photo identity in remove_photos is the exact path string from the API ("uploads/&lt;uuid&gt;.&lt;ext&gt;").
+    - Photo shown in the edit form uses the existing /uploads URL pattern the list view already uses.
+    - A body above the middleware limit returns 413, as in create.
+    - Concurrency between simultaneous edits of the same log is not addressed.
+    - Delete button, GET /api/logs/{id}, docs, and Docker are untouched.
+  </assumptions>
+  <edge_cases>
+    - Description-only edit with photos untouched.
+    - Remove all existing photos and add equal or more new ones (valid up to 5).
+    - Remove none, add enough to exceed 5 (422).
+    - Duplicate remove_photos entries.
+    - remove_photos naming a photo of a different log.
+    - Path-traversal or absolute-path strings in remove_photos.
+    - Non-image content renamed to .jpg among new files.
+    - Failure after files are written (for example DB error) must clean up new files and must not delete the old ones.
+    - Old file already missing from disk during removal.
+    - Photo order after mixed remove and add.
+    - Edit of a nonexistent id with otherwise valid payload.
+    - Frontend: Save error then fix and re-Save; Cancel after an error; description containing markup.
+  </edge_cases>
+  <risks>
+    <risk severity="medium">DB and filesystem consistency: old files must be deleted only after the DB commit succeeds, and new files cleaned up on any failure.</risk>
+    <risk severity="medium">Frontend re-render could wipe the edit state on error if the list is reloaded; the error path must not reload.</risk>
+    <risk severity="low">Reusing create's validation helpers might need small refactors that could regress the 70 existing tests.</risk>
+    <risk severity="low">Timestamps may be equal if two operations fall in the same microsecond; tests should not depend on strict increase without care.</risk>
+  </risks>
+  <dependencies>
+    Existing FastAPI app, python-multipart, SQLite, pytest and the existing test client, and the existing create validation helpers in backend/routes.py. Headless Chrome for frontend verification.
+  </dependencies>
+  <self_critique>
+    Stories map to criteria: change description (1,2,11,14), remove and add photos (3-5,7,8,15), see errors and keep input (16), cancel (17). Failure atomicity is covered by 6 and 9. Every criterion has an observable condition. Biggest risk: criterion 6's "500 with no change" needs a way to inject a failure in tests, which is left to the implementer. A second risk is that the frontend edit-form details (labels and element structure) are not fixed, so the verifier must locate controls by role and text: Edit, Remove, Save, Cancel, textarea, file input.
+  </self_critique>
+</spec>

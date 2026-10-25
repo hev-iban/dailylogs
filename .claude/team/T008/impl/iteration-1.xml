@@ -1,0 +1,26 @@
+<implementation>
+  <iteration>1</iteration>
+  <files>
+    <file path="C:/Users/Ivan/Desktop/A-Finals/frontend/style.css">New: custom-property light/dark theme, 600px column, sticky header, pill buttons, hover only in (hover:hover)+(pointer:fine), two-tone focus ring, :active, :has() selected photo, aria-busy spinner, reduced-motion static ring, error boxes with glyph + "Error:" prefix.</file>
+    <file path="C:/Users/Ivan/Desktop/A-Finals/frontend/app.js">setBusy/clearBusy (disabled + aria-busy + "Saving..."/"Deleting..." labels, restored in finally); what-failed + next-step error messages with known-detail hints, network and load wording.</file>
+  </files>
+  <tests>
+    <test>Backend suite: 112 passed.</test>
+    <test>Manual CDP screenshots against temp-path server (light, dark, dark edit mode with checked photo and focus ring, 360px); scrollWidth 360 at 360px. Full criteria matrix not scripted.</test>
+  </tests>
+  <commands_run>
+    <command>cd backend; pytest -p no:cacheprovider -q tests</command>
+    <command>node --check frontend/app.js</command>
+    <command>temp-DB uvicorn + node CDP screenshot script in scratchpad</command>
+  </commands_run>
+  <design_decisions>
+    <decision>Light primary #1d9bf0 with dark text #0f1419 (6.1:1) rather than white text (3.0:1); dark primary #1a8cd8 so white focus ring has >=3:1 against the fill.</decision>
+    <decision>Focus ring color is #0f1419 (light) / #fff (dark), 3px with 3px offset gap, rather than blue ring which fails 3:1 against blue fill.</decision>
+    <decision>Selected photo text cue via ::after "will be removed" in CSS (no JS), rather than changing label text in app.js.</decision>
+    <decision>Busy/disabled both set; disabled-without-busy dimmed to 0.5 opacity, busy keeps opacity 1.</decision>
+    <decision>Body is the 600px column (with side borders) so sticky header lives inside it; rejected full-width wrapper element since index.html is unchanged.</decision>
+    <decision>Hint matching by case-insensitive substring of detail, rather than exact equality, to survive suffixes.</decision>
+  </design_decisions>
+  <blocked_reason>none</blocked_reason>
+  <self_critique>Contrast ratios computed by hand, not by script; muted dark #8b98a5 and danger colors on tinted backgrounds unverified numerically. Busy-state, error text and Tab order were not exercised with CDP intercepts. :active hover override relies on specificity ordering.</self_critique>
+</implementation>

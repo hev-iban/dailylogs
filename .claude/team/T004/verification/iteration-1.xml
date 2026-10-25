@@ -1,0 +1,24 @@
+<verification>
+  <iteration>1</iteration>
+  <verdict>pass</verdict>
+  <criteria>
+    <criterion id="1">met - live GET / -> 200 text/html; charset=utf-8, body byte-identical (cmp) to frontend/index.html, contains DailyLog</criterion>
+    <criterion id="2">met - live GET /static/style.css and /static/app.js -> 200, 0 bytes; /static/missing.txt -> 404</criterion>
+    <criterion id="3">met - index.html has href="/static/style.css" and src="/static/app.js"; rest of the file looks unchanged (no prior copy to diff; no git)</criterion>
+    <criterion id="4">met - live: POST /api/logs valid 201, blank description 422, photo over 5 MiB 413; GET /api/logs newest first (id 2 before id 1). /api/logs/ gives 307 redirect (default Starlette behavior)</criterion>
+    <criterion id="5">met - live GET /logs 404 and POST /logs 404 (not 405)</criterion>
+    <criterion id="6">met - real server started from backend/ via uvicorn main:app served / and /static/*; the path comes from the PROJECT_ROOT constant in models.py. The tests ran from backend/ only; no run from another cwd.</criterion>
+    <criterion id="7">met - 55 passed (50 retargeted + 5 new). I did not diff against the original 50 tests.</criterion>
+    <criterion id="8">met - after cleanup the project tree is identical to the pre-run snapshot. No logs.db, no __pycache__, no .pytest_cache. uploads/ is an empty pre-existing dir. style.css and app.js are 0 bytes. No new files.</criterion>
+  </criteria>
+  <test_results>
+    <result>cd backend; PYTHONDONTWRITEBYTECODE=1 ../.venv/Scripts/python.exe -m pytest -p no:cacheprovider tests -q -> 55 passed, 1 warning (httpx deprecation in Starlette testclient)</result>
+  </test_results>
+  <runtime_check result="yes">
+    Started uvicorn main:app from backend/ on port 8765 and drove it with curl as in the criteria above. This created the real logs.db and 2 PNGs in uploads/. I deleted exactly those (logs.db, 5cdc3a64...png, d10828a4...png) and stopped the server (confirmed port closed). The tree was diffed against a snapshot taken before the run: identical. The oversize check used a 5 MiB+10 byte photo, which hit the 413 "photo exceeds 5 MiB" path rather than the whole-body middleware.
+  </runtime_check>
+  <bugs></bugs>
+  <self_critique>
+    Did not run create_app with temp paths from a script outside the project, or the tests from another cwd. The cwd-independence is shown only by the constant-based path and a run from backend/. The body-limit middleware 413 was not exercised over HTTP on the real server. Criterion 3 "byte-identical rest" was checked by reading, not by diff. The first pkill attempt failed (not installed), so the server stayed up briefly until killed another way; no effect on the results.
+  </self_critique>
+</verification>

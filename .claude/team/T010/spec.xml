@@ -1,0 +1,65 @@
+<spec>
+  <user_stories>
+    <story>As a user writing a log, I see how many of 200 characters I have used, so I know the limit before I post.</story>
+    <story>As a user who types or pastes over 200 characters, I see a clear error (text, not only color) and my text is not silently cut off.</story>
+    <story>As a user over the limit, I cannot post or save; the reason is shown next to the disabled button.</story>
+    <story>As a user editing an existing log (including one already over 200), I get the same counter, error and blocking behavior.</story>
+    <story>As a keyboard or screen-reader user, I am told about the error (aria-invalid, polite live region, described-by).</story>
+  </user_stories>
+  <acceptance_criteria>
+    <c n="1">Neither textarea#description (create form) nor the inline edit textarea has a maxlength attribute or maxLength limit. After Input.insertText of 237 characters, textarea.value.length is 237.</c>
+    <c n="2">A counter element sits under each description textarea and shows text "N/200". N = [...value.trim()].length. Initial create state reads "0/200". It updates on every input event: typing, paste (insertText), and programmatic value set when the edit form opens.</c>
+    <c n="3">Counting uses code points on trimmed text: 200 emoji (each 2 UTF-16 units) reads "200/200" and is valid. Trailing or leading whitespace is not counted.</c>
+    <c n="4">At N = 200 there is no error: counter is not error-styled, textarea has no aria-invalid="true", message is empty or hidden, Save is enabled. At N = 201 all over-limit effects in 5-7 appear.</c>
+    <c n="5">When N > 200 an inline message is visible with text of the form "Description is too long: 237/200 characters. Remove 37 characters to post." (numbers computed from N). The textarea has aria-invalid="true" and aria-describedby that includes the message element id. The message element (or its container) has aria-live="polite" (container present in the DOM before the message appears). The counter also gets an error style, with computed color differing from its normal state.</c>
+    <c n="6">When N > 200 the form's Save/Post button has the disabled property true, and the visible message explains why. The button has no aria-busy="true", no loading indicator, and its label text is unchanged ("Save" or the existing idle label).</c>
+    <c n="7">When N > 200 and submit is triggered by other means (form.requestSubmit(), Enter key path, dispatching a submit event), the submit handler returns early: Network/Fetch interception records zero requests to /api/logs (POST or PUT) for that action. No server-error banner (#form-error) appears from this path.</c>
+    <c n="8">When the value returns to N <= 200 (delete text), the message is removed or hidden, aria-invalid is absent or "false", counter returns to normal style, and Save is enabled, all in the same input event with no further interaction.</c>
+    <c n="9">After a successful create (mocked or on a temp server), the form reset leaves the counter at "0/200", no error message, no aria-invalid, and Save enabled.</c>
+    <c n="10">Opening Edit on an existing log whose description is longer than 200 code points immediately shows, with no typing, the counter "N/200" in error state, the message, aria-invalid="true", and Save disabled. Opening Edit on a normal log shows its true count and no error.</c>
+    <c n="11">Create form and edit form are independent: over-limit state in one does not disable or mark the other. Only one edit is open at a time, as before.</c>
+    <c n="12">Blank handling is unchanged: the textarea keeps required; blank submit behaves as before (native validation or server 422 with T008-format error). Whitespace-only input counts as 0 and shows no over-limit error.</c>
+    <c n="13">Server safety net stays: the ERROR_HINTS 200-char hint and 422 handling remain in app.js. A forced request that gets a 422 (Fetch-interception fulfilling a 422) still shows the T008-format "Couldn't ... your log: ..." error.</c>
+    <c n="14">Computed contrast is >= 4.5:1 in both light and dark themes (emulate prefers-color-scheme) for: the counter in normal state, the counter in error state, and the error message text, each measured against its effective background.</c>
+    <c n="15">At a 360px viewport width (Emulation.setDeviceMetricsOverride), in create form and edit form, in normal and over-limit states: document.documentElement.scrollWidth <= 360 (no horizontal overflow), and the counter and message are fully visible, not clipped, and do not overlap the Save button or textarea (bounding rects do not intersect).</c>
+    <c n="16">T008 states still hold: the focus-visible ring on the textarea and Save, hover styles only under (hover: hover) and (pointer: fine), aria-busy loading indicator during an in-flight save, and nothing disabled without a visible reason.</c>
+    <c n="17">Only frontend/index.html, frontend/app.js and frontend/style.css are changed. No new files. No user data is inserted via innerHTML. The backend's 130 tests still pass, and the backend files are unchanged.</c>
+    <c n="18">Verification does not touch the real logs.db or uploads/. Any temp server uses a port other than 8000, confirmed free beforehand, and GET /api/logs on it returns [] before any write.</c>
+  </acceptance_criteria>
+  <assumptions>
+    <a>The submit button's existing label stays as is (the request calls it Save). The create button keeps whatever label it has now.</a>
+    <a>Message wording is an example. Tests check for the numbers N/200 and the "remove X" count, plus the words "too long", rather than the exact sentence.</a>
+    <a>Disabled Save is acceptable because the adjacent message states the reason. No tooltip is required.</a>
+    <a>The counter is also shown in normal state (always visible), not only near the limit.</a>
+    <a>When the edit form opens, its counter and message are initialized from the starting value. The live-region message for an already-over post may be announced on open.</a>
+    <a>The counter's normal-state color may reuse the existing muted text color if it meets 4.5:1. Otherwise a darker one is used.</a>
+  </assumptions>
+  <edge_cases>
+    <e>Paste of a very long text (thousands of characters): counts correctly and the page stays responsive.</e>
+    <e>Astral characters (emoji) and combining sequences: counted as code points, matching Python len, so client and server agree. Grapheme clusters made of several code points count as several.</e>
+    <e>Exactly 200 passes, 201 blocks.</e>
+    <e>Leading or trailing spaces that bring the raw length over 200 but the trimmed length to 200 or less: no error.</e>
+    <e>Edit opened on an over-limit post, then trimmed to 200 or less: Save enables immediately.</e>
+    <e>Edit canceled or saved: the counter and message are removed with the form. No stale state on reopen.</e>
+    <e>Over limit while a save is in flight is not reachable. If the user edits during a save, the loading state takes precedence and the handler still refuses over-limit submits.</e>
+    <e>Form reset after successful create must also clear the over-limit state, since reset fires no input event.</e>
+    <e>Live-region message updates must not announce on every keystroke while under the limit (the message is empty then).</e>
+  </edge_cases>
+  <risks>
+    <risk severity="medium">form.reset() fires no input event, so the counter and error may go stale after a successful create unless explicitly refreshed.</risk>
+    <risk severity="medium">The disabled Save button must not be confused with the loading state (aria-busy, spinner). The two states must stay distinct.</risk>
+    <risk severity="medium">Error-color contrast in dark theme can fail 4.5:1 if the light-theme red is reused.</risk>
+    <risk severity="low">A 360px layout with counter, message and button may wrap or overlap.</risk>
+    <risk severity="low">Client and server counts could diverge (JS code points versus Python len after strip). JS trim and Python strip differ slightly on exotic whitespace. The server 422 safety net covers this.</risk>
+  </risks>
+  <dependencies>
+    <d>C:/Users/Ivan/Desktop/A-Finals/frontend/index.html</d>
+    <d>C:/Users/Ivan/Desktop/A-Finals/frontend/app.js</d>
+    <d>C:/Users/Ivan/Desktop/A-Finals/frontend/style.css</d>
+    <d>Backend (models.py, 130 tests): read-only, unchanged</d>
+    <d>Headless Chrome with CDP for verification: Input.insertText, Fetch, Network, Emulation</d>
+  </dependencies>
+  <self_critique>
+    Each story maps to criteria: counter (2,3), visible error (4,5), blocking (6,7,8), edit (10,11), accessibility (5), and the constraints (1,12-18). Every criterion is checkable through DOM, computed style, aria attributes, the disabled property, request logs, or bounding rects. The biggest remaining risk is the exact wording and live-region announcement behavior, which a headless run can check only structurally (the aria-live attribute), not by an actual screen-reader announcement. A second risk is that the contrast measurement must resolve the effective background color through transparent ancestors.
+  </self_critique>
+</spec>

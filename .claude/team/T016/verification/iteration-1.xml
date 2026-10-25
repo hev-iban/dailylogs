@@ -1,0 +1,33 @@
+<verification>
+  <iteration>1</iteration>
+  <verdict>fail</verdict>
+  <criteria>
+    <criterion id="1">met - git status shows only .github/workflows/tests.yml as new (ignoring .claude/team); safe_load parses; top-level keys name, True (the 'on' key), jobs; no other project file changed; no docker/compose.</criterion>
+    <criterion id="2">met - on = {push: {branches: [main]}, pull_request: {branches: [main]}}; no schedule or workflow_dispatch.</criterion>
+    <criterion id="3">met - one job (test), runs-on ubuntu-latest, actions/setup-python@v5 with python-version "3.12" (string), cache: pip with cache-dependency-path: requirements.txt.</criterion>
+    <criterion id="4">met - services.postgres image postgres:17; env POSTGRES_USER ci_user, POSTGRES_PASSWORD ci_throwaway_password, POSTGRES_DB dailylog_test; ports ['5432:5432']; options '--health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10'.</criterion>
+    <criterion id="5">met - TEST_DATABASE_URL = postgresql://ci_user:ci_throwaway_password@localhost:5432/dailylog_test matches service user, password, db (ends _test); no secrets used; the string DATABASE_URL appears nowhere except as part of TEST_DATABASE_URL.</criterion>
+    <criterion id="6">met - step order: actions/checkout@v4, setup-python, 'pip install -r requirements.txt', then test step with working-directory backend and 'python -m pytest -q tests'.</criterion>
+    <criterion id="7">not met - (a) structural check done and passes. (b) not run to completion: the clean-venv install step itself fails (see bug 1), and Postgres at localhost:5432 was not usable (psycopg.OperationalError: connection failed ... Socket is not connected on 127.0.0.1:5432), so the suite could not run. Spec allows "not run" for no reachable Postgres, but the install failure is a real reproduced failure of the CI steps.</criterion>
+  </criteria>
+  <test_results>
+    <result>python -m venv + pip install -r requirements.txt (Python 3.12.6, Windows) -> FAILED: "No matching distribution found for psycopg-binary==3.2.0.dev1; implementation_name != 'pypy' and extra == 'binary'"</result>
+    <result>pip index versions psycopg-binary -> 3.2.0 and later exist; 3.2.0.dev1 does not (index-wide, not platform specific)</result>
+    <result>Diagnostic only: installed psycopg==3.2 + psycopg-binary==3.2.0 + remaining pins by hand, then pytest -q tests with DATABASE_URL unset, TEST_DATABASE_URL=postgresql://postgres@localhost:5432/dailylog_test -> every test errors at fixture setup with psycopg.OperationalError (connection failed, Socket not connected); not run (Postgres not reachable). Nothing created or dropped.</result>
+    <result>PyYAML safe_load structural check of tests.yml -> criteria 1-6 satisfied</result>
+  </test_results>
+  <runtime_check result="no">
+    The suite could not be executed. Plain 'pip install -r requirements.txt' fails in a fresh venv, and Postgres on localhost:5432 did not accept the connection. Did not attempt to install or start Postgres. Nothing was started on port 8000; dailylog, logs.db and uploads/ were not touched. No project files modified (git status shows only .github/).
+  </runtime_check>
+  <bugs>
+    <bug>
+      <description>requirements.txt pins `psycopg[binary]==3.2`. The psycopg 3.2 release metadata makes its `binary` extra require `psycopg-binary==3.2.0.dev1`, which is not on PyPI, so `pip install -r requirements.txt` fails in a clean environment. The workflow's "Install dependencies" step runs exactly that command, so CI would fail at that step before any test runs (the index is platform independent, so this is expected on ubuntu-latest too). The user's existing environment likely only works because psycopg-binary is already installed. Fix needs requirements.txt (e.g. psycopg[binary]==3.2.13, or psycopg==3.2.0 with psycopg-binary==3.2.0), which the spec forbids changing, so the spec needs an amendment.</description>
+      <reproduction>python -m venv v; v/Scripts/python -m pip install -r requirements.txt  (Python 3.12) -> ERROR: No matching distribution found for psycopg-binary==3.2.0.dev1</reproduction>
+      <severity>high</severity>
+      <owner>planner</owner>
+    </bug>
+  </bugs>
+  <self_critique>
+    Did not test on Linux/GitHub; the install failure was reproduced on Windows/pip 24.2 only, though the missing release is index-wide (pip index versions lists no 3.2.0.dev1). Postgres unavailability may be an artifact of this environment (server stopped, or password auth) rather than a defect; I did not diagnose it further or start anything. Action version tags (checkout@v4, setup-python@v5) were not validated against GitHub. Workflow YAML itself looks correct against all structural criteria; the fail verdict rests on the requirements install failure.
+  </self_critique>
+</verification>

@@ -1,0 +1,22 @@
+<implementation>
+  <iteration>1</iteration>
+  <files>
+    <file path="backend/models.py">added DescriptionIn Pydantic model (strict str, strip_whitespace, min_length=1, max_length=MAX_DESCRIPTION_CHARS)</file>
+    <file path="backend/routes.py">_validate_description body now uses DescriptionIn.model_validate and maps ValidationError to the two existing details</file>
+    <file path="backend/tests/test_description_model.py">new tests: model trim/code points, non-str mapping to blank message, blank description plus oversized photo</file>
+  </files>
+  <tests>
+    <test>Full suite 142 passed (existing unchanged plus new), TEST_DATABASE_URL=dailylog_test, DATABASE_URL unset.</test>
+  </tests>
+  <commands_run>
+    <command>../.venv/Scripts/python.exe -B -m pytest -q -p no:cacheprovider (read-only use of existing venv)</command>
+  </commands_run>
+  <design_decisions>
+    <decision>Kept _validate_description as a thin wrapper called inside the existing form block; rejected FastAPI Form-model parameter (breaks 404/413 ordering, default error body).</decision>
+    <decision>strict=True so bytes/numbers/UploadFile are rejected as non-str (blank message); rejected lax coercion.</decision>
+    <decision>Too-long detected via error type string_too_long; all else maps to blank message.</decision>
+    <decision>New tests in a new file rather than editing existing ones.</decision>
+  </design_decisions>
+  <blocked_reason>none</blocked_reason>
+  <self_critique>Strip equivalence with str.strip() for exotic Unicode whitespace is assumed, not tested. Handler bodies unchanged.</self_critique>
+</implementation>

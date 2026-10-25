@@ -1,0 +1,23 @@
+<implementation>
+  <iteration>1</iteration>
+  <files>
+    <file path="frontend/index.html">Inline head script applies saved "light"/"dark" to html[data-theme] before first paint (reason in comment); adds button#theme-toggle with aria-hidden glyph span in header after h1.</file>
+    <file path="frontend/style.css">Dark tokens now apply for :root:not([data-theme="light"]) under the media query and for :root[data-theme="dark"]; color-scheme set per explicit choice; .theme-toggle (36x36, margin-left:auto, border-strong border, --text glyph) with hover (fine pointers only), active; focus ring and reduced-motion come from existing rules.</file>
+    <file path="frontend/app.js">Theme logic at top: currentTheme() (attribute else matchMedia), click toggles to opposite, sets attribute, saves to localStorage "dailylog-theme" in try/catch, updates aria-label ("Switch to dark/light theme") and glyph (moon/sun with U+FE0E); label also follows system changes.</file>
+  </files>
+  <tests>
+    <test>Backend: 130 passed. node --check app.js passes. No live browser run was done (not verified in Chrome).</test>
+  </tests>
+  <commands_run>
+    <command>node --check frontend/app.js</command>
+    <command>cd backend &amp;&amp; PYTHONDONTWRITEBYTECODE=1 ../.venv/Scripts/python.exe -m pytest -p no:cacheprovider -q tests</command>
+  </commands_run>
+  <design_decisions>
+    <decision>Dark token list duplicated (media query + data-theme="dark"), commented; rejected light-dark() because computed --bg would be the raw light-dark() string, breaking token-level checks and equality of system vs explicit.</decision>
+    <decision>Glyph/label show the target theme; rejected aria-pressed since the name already states the action.</decision>
+    <decision>Theme code placed at top of app.js so it works even if later code fails.</decision>
+    <decision>Button colors reuse existing tokens (--border-strong, --text, --ghost-*), no new tokens; contrast: border-strong dark #71767b on ~black is about 4.2:1 (&gt;=3).</decision>
+  </design_decisions>
+  <blocked_reason>none</blocked_reason>
+  <self_critique>Not exercised in a browser: 360px header fit, glyph rendering (U+263E/U+2600 font availability, not emoji), and focus ring clipping at the header right edge are unchecked. No deviation from spec.</self_critique>
+</implementation>

@@ -1,0 +1,38 @@
+<spec>
+  <user_stories>
+    <story>As a user creating a log, I can enter a description of 1 to 200 characters, and longer ones are rejected with a clear message.</story>
+    <story>As a user editing a log, the same 1..200 rule applies, and a rejected edit leaves the log unchanged.</story>
+    <story>As a user in the browser, the description fields stop accepting input at 200 characters and API errors tell me what to do next.</story>
+  </user_stories>
+  <acceptance_criteria>
+    <c n="1">POST /api/logs with a description of 1 character (after trim) succeeds.</c>
+    <c n="2">POST with exactly 200 characters succeeds; with 201 returns 422 and detail "description must be at most 200 characters"; nothing is stored.</c>
+    <c n="3">POST with 200 characters plus leading/trailing spaces succeeds and the stored description is the trimmed 200 characters.</c>
+    <c n="4">POST with whitespace-only or missing description still returns 422 "description is required and cannot be blank".</c>
+    <c n="5">Criteria 1-4 hold identically for PUT /api/logs/{id}.</c>
+    <c n="6">A rejected PUT (201 chars or blank) leaves the stored log byte-for-byte unchanged (verified by re-reading it).</c>
+    <c n="7">The 200 limit is a named constant in backend/models.py beside the other limits, and routes.py uses it.</c>
+    <c n="8">textarea#description in index.html and the textarea created by the inline edit form in app.js both carry maxlength="200".</c>
+    <c n="9">ERROR_HINTS in app.js has an entry for the new detail, yielding "Couldn't <verb> your log: description must be at most 200 characters. Shorten your description to 200 characters or fewer and try again."</c>
+    <c n="10">All 112 existing tests pass (any test that sent more than 200 characters is updated and listed in the report), plus the new tests; test_real_paths_untouched passes; real logs.db and uploads/ are never touched (temp paths only).</c>
+  </acceptance_criteria>
+  <assumptions>
+    <a>Length is Python len() of the trimmed string (Unicode code points), per the request.</a>
+    <a>Browser maxlength counts UTF-16 code units, so emoji may hit the limit slightly earlier in the browser than on the server. Recorded, not reconciled.</a>
+    <a>No visual counter, no minlength attribute, no style.css change, no docs/Docker changes, no new files.</a>
+    <a>Edited files: backend/routes.py, backend/models.py, backend/tests/test_logs.py, frontend/index.html, frontend/app.js.</a>
+  </assumptions>
+  <edge_cases>
+    <e>Exactly 200 and 201 characters, with and without surrounding whitespace.</e>
+    <e>Over-long description that is padded: only the trimmed length counts.</e>
+    <e>Multi-code-point characters (emoji) counted by code points on the server.</e>
+    <e>Blank check runs before the length check, so whitespace-only keeps the existing message.</e>
+  </edge_cases>
+  <risks>
+    <risk severity="low">Existing tests sending descriptions over 200 characters will fail until updated.</risk>
+    <risk severity="low">The ERROR_HINTS key must match the server detail string exactly, or the hint silently won't show.</risk>
+    <risk severity="low">Browser and server length counts differ for non-BMP characters.</risk>
+  </risks>
+  <dependencies>Existing files only; no new packages.</dependencies>
+  <self_critique>Every story maps to a criterion and every criterion is observable. The biggest unknown is how many existing tests use more than 200 characters, and the implementer must list them. The ERROR_HINTS matching mechanism (exact or substring) was not inspected.</self_critique>
+</spec>

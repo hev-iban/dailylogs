@@ -1,0 +1,55 @@
+<spec>
+  <user_stories>
+    <story>As a user, I create a log by submitting one multipart request with a description and 1 to 5 photos, and get back the created log.</story>
+    <story>As a user, I get a clear HTTP error when the description or any photo is invalid, and nothing from that request is stored.</story>
+    <story>As an operator, I know uploaded files cannot overwrite each other or escape uploads/, and tests never touch the real DB or uploads folder.</story>
+  </user_stories>
+  <acceptance_criteria>
+    <c n="1">POST /logs (multipart/form-data) with text field "description" and 1-5 file parts named "photos", all valid, returns 201. Body is JSON containing id, description, photos (list of stored image paths), created_at, updated_at; created_at equals updated_at.</c>
+    <c n="2">After a 201, the log row (description, timestamps, one photo path per photo) exists in SQLite, and each photo exists as a file under uploads/ at the returned path.</c>
+    <c n="3">Description missing, empty, or whitespace-only returns 422 and nothing is stored (no row, no files).</c>
+    <c n="4">Zero photos returns 422. Six or more photos returns 422. 1 and 5 photos succeed (boundaries).</c>
+    <c n="5">A photo whose extension is not .jpg/.jpeg/.png/.webp returns 422.</c>
+    <c n="6">A file with an allowed extension but content that is not a valid image (e.g. text bytes, truncated/corrupt data), or whose real format is not JPEG/PNG/WEBP, returns 422.</c>
+    <c n="7">A photo of exactly 5*1024*1024 bytes (otherwise valid) is accepted; one byte more returns 413.</c>
+    <c n="8">A request whose total body exceeds a configured limit returns 413. The limit is a named constant in models.py and is at least 5 photos x 5 MiB plus overhead.</c>
+    <c n="9">If any photo in a request fails validation (type, content, size, count), no files from that request remain in uploads/ and no DB row is created. Likewise if a disk or DB error occurs mid-request.</c>
+    <c n="10">Unexpected server or disk error returns 500 with no leftover files and no row.</c>
+    <c n="11">Stored filenames are generated and unique (e.g. random/UUID based, extension derived from validated format); two uploads of the same original filename do not overwrite each other. Original filenames containing path separators, "..", drive letters, or absolute paths never create files outside uploads/.</c>
+    <c n="12">Tests in backend/tests/test_logs.py cover every criterion above, using a temporary SQLite DB and temporary uploads directory (the real database file and uploads/ are untouched after the test run).</c>
+    <c n="13">Only the create endpoint is added. No list/get/edit/delete/search, frontend, Docker changes. Files edited are limited to backend/main.py, database.py, models.py, routes.py, tests/test_logs.py (plus requirements.txt only if a missing dependency requires it).</c>
+  </acceptance_criteria>
+  <assumptions>
+    <a>Endpoint is POST /logs; form field "description", repeated file field "photos". User did not name them.</a>
+    <a>Description is stored trimmed; validity is judged after trimming. No max length imposed.</a>
+    <a>Validation uses both extension (case-insensitive) and actual image content; client Content-Type is not trusted alone.</a>
+    <a>Timestamps are UTC ISO 8601 strings.</a>
+    <a>Photo paths are stored relative to the project root (e.g. uploads/xxxx.png) and returned as such.</a>
+    <a>Body-size limit exact value is the implementer's choice, subject to criterion 8; 413 for it may be raised before or after parsing.</a>
+    <a>No __init__.py or conftest.py is created; if imports require __init__.py, the implementer records why.</a>
+    <a>Photo count over 5 is checked as 422 even if the body-size limit is not hit.</a>
+    <a>Uploads folder and DB location are configurable (e.g. via app wiring/dependency) so tests can redirect them; mechanism is the implementer's call.</a>
+  </assumptions>
+  <edge_cases>
+    <e>Description with only tabs/newlines; null-like text is just text and valid if non-blank.</e>
+    <e>Multiple files with identical original names; original name with "../", "..\\", absolute or drive path, or no name.</e>
+    <e>Mixed valid and invalid photos: valid ones already written must be cleaned up.</e>
+    <e>Extension/content mismatch (PNG bytes named .jpg): content must be a valid allowed format; the mismatch policy is documented by the implementer.</e>
+    <e>Empty (0-byte) file part, empty filename part, or "photos" field sent as a non-file text value: 422.</e>
+    <e>Oversized photo combined with other errors: status precedence among 413 and 422 should be deterministic and tested.</e>
+    <e>Concurrent requests produce distinct filenames.</e>
+    <e>Uploads folder missing at startup: created, or error is 500 and cleaned.</e>
+  </edge_cases>
+  <risks>
+    <risk severity="medium">Streaming vs buffered reads: enforcing 5 MiB and the body limit without loading huge uploads into memory needs care.</risk>
+    <risk severity="medium">FastAPI default validation errors are 422 but the 413 and 500 cases need explicit handling; precedence among them is easy to get inconsistent.</risk>
+    <risk severity="low">Cleanup on failure must also cover DB failure after files are written (atomicity across disk and SQLite).</risk>
+    <risk severity="low">Windows file handling (open handles preventing deletion in tests/cleanup) and Pillow decompression-bomb concerns for crafted images.</risk>
+  </risks>
+  <dependencies>
+    fastapi, uvicorn, python-multipart, pillow, httpx, pytest (all already in requirements.txt); stdlib sqlite3. Files: backend/main.py, database.py, models.py, routes.py, tests/test_logs.py; uploads/ folder.
+  </dependencies>
+  <self_critique>
+    Every story maps to criteria (story 1: 1-2; story 2: 3-10; story 3: 11-12). All criteria are observable via HTTP status, DB rows and directory contents. Biggest uncertainty: the invented endpoint/field names and response shape (POST /logs, "description", "photos"), plus the body-limit value, which the user may have preferred differently; these are recorded as assumptions and are cheap to change.
+  </self_critique>
+</spec>

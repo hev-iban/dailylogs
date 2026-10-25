@@ -1,0 +1,8 @@
+<implementation iteration="2">
+  <files_touched>
+    <file>requirements.txt</file>
+  </files_touched>
+  <notes>
+    <note criterion="8">Changed `psycopg[binary]==3.2` to `psycopg[binary]==3.3.6` per user decision. Edit made by the orchestrator (one line). .github/workflows/tests.yml unchanged from iteration 1.</note>
+  </notes>
+</implementation>

@@ -1,0 +1,24 @@
+<implementation>
+  <iteration>1</iteration>
+  <files>
+    <file path="Dockerfile">python:3.12-slim, pip install requirements, /app/backend + /app/frontend siblings, /app/uploads owned by non-root user, uvicorn on 0.0.0.0:8000</file>
+    <file path="compose.yaml">api + db (postgres:17), pg_isready healthcheck, service_healthy, ${VAR:-default} creds, API_PORT default 8080, no db ports, volumes pgdata and uploads</file>
+    <file path=".dockerignore">excludes .git, .github, .venv, .claude, .env, .pytest_cache, __pycache__, *.pyc, uploads</file>
+    <file path="README.md">two structure rows updated; short "Run with Docker" section added</file>
+  </files>
+  <tests>
+    <test>`docker compose -p t019impl config` parses and shows api published 8080 to 8000. Runtime smoke test NOT done: Docker daemon not running.</test>
+  </tests>
+  <commands_run>
+    <command>docker compose -p t019impl config</command>
+    <command>docker compose -p t019impl up -d --build (failed: daemon unavailable; nothing created)</command>
+  </commands_run>
+  <design_decisions>
+    <decision>Run as non-root user with /app/uploads pre-chowned so a fresh named volume inherits ownership; rejected running as root.</decision>
+    <decision>Default creds via ${VAR:-default} with dev-only placeholder; rejected required env_file so zero-setup up works.</decision>
+    <decision>Healthcheck uses $${POSTGRES_USER} evaluated in the container; rejected duplicating compose substitution.</decision>
+    <decision>.dockerignore also excludes .github and .gitignore (harmless extras).</decision>
+  </design_decisions>
+  <blocked_reason>none</blocked_reason>
+  <self_critique>Never built or run (daemon down): upload writability, healthcheck gating and persistence are unverified. Verifier must run them with -p t019verify.</self_critique>
+</implementation>

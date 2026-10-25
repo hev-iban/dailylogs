@@ -1,0 +1,43 @@
+<spec>
+  <user_stories>
+    <story>As a client, I can GET /logs and receive every log ordered newest to oldest by created_at.</story>
+    <story>As a client, each log in the list has the same shape as the POST /logs response, with photos in upload order.</story>
+    <story>As a maintainer, I know created_at is assigned only by the server and a client cannot supply or override it.</story>
+  </user_stories>
+  <acceptance_criteria>
+    <criterion n="1">GET /logs returns HTTP 200 and a JSON array. With no logs stored it returns [].</criterion>
+    <criterion n="2">Each element has exactly the fields id, description, photos (list of strings), created_at, updated_at, matching the shape of the POST /logs response for the same log.</criterion>
+    <criterion n="3">Elements are ordered by created_at descending. After creating logs A, B, C in that order (with distinguishable timestamps), the response ids are [C, B, A].</criterion>
+    <criterion n="4">When two logs have identical created_at, the one with the higher id appears first. Tested by forcing equal timestamps in the isolated test DB.</criterion>
+    <criterion n="5">Each log's photos list is in upload order (position), identical to what POST returned for that log.</criterion>
+    <criterion n="6">A client-supplied created_at (and updated_at) sent with POST /logs, in any input form the endpoint accepts, does not affect the stored value. The returned and listed created_at is the server-generated UTC ISO 8601 timestamp. The POST success/failure status behavior is otherwise unchanged from T002.</criterion>
+    <criterion n="7">All 44 existing tests pass unchanged. New tests cover ordering, tie-break, empty list, response shape, and ignored client created_at.</criterion>
+    <criterion n="8">Tests use an isolated temp DB and uploads directory. After a test run, no DB, uploads, __pycache__ or .pytest_cache is left in the project.</criterion>
+    <criterion n="9">Only existing files under backend/ are edited. No new files. frontend/, Docker files, README.md, specs.md and requirements.txt are untouched.</criterion>
+  </acceptance_criteria>
+  <assumptions>
+    <assumption>"Posted newest to oldest" means the listing order of GET /logs, not a change to POST.</assumption>
+    <assumption>created_at is already server-set at creation (T002). This stage only verifies, and tests, that clients cannot override it. If POST currently ignores unknown fields, that behavior is kept. If it currently rejects them, that behavior is kept, and the test asserts whichever applies without changing it.</assumption>
+    <assumption>Photo URLs/paths in the list use the same representation as the POST response.</assumption>
+    <assumption>No pagination, so all logs are returned.</assumption>
+  </assumptions>
+  <edge_cases>
+    <case>Empty store returns [].</case>
+    <case>Logs created within the same microsecond or with forced identical created_at are ordered by id descending.</case>
+    <case>A log with zero photos returns photos: [].</case>
+    <case>A log with multiple photos returns them in position order, without cross-contamination between logs.</case>
+    <case>Ordering is by the timestamp value, not by string quirks. All timestamps share one UTC format, so the ordering is consistent.</case>
+  </edge_cases>
+  <risks>
+    <risk severity="low">Fast successive creates may yield equal or near-equal timestamps. The id tie-break covers this.</risk>
+    <risk severity="low">Adding GET on the /logs path must not disturb the POST route, body-limit middleware, or create_app signature.</risk>
+    <risk severity="low">Tests that force equal timestamps need direct access to the temp DB. This must remain within the isolated fixture.</risk>
+  </risks>
+  <dependencies>
+    <dependency>Existing backend/main.py, database.py, models.py, routes.py, tests/test_logs.py.</dependency>
+    <dependency>Existing installed packages in .venv (no new packages).</dependency>
+  </dependencies>
+  <self_critique>
+    Every story maps to criteria (list: 1-5; shape: 2, 5; server-only created_at: 6). All criteria are observable. The biggest uncertainty is the exact current POST handling of extra fields. The spec preserves the existing behavior rather than assuming it. The tie-break test depends on the fixture's DB access.
+  </self_critique>
+</spec>

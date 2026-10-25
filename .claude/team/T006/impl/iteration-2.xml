@@ -1,0 +1,18 @@
+<implementation>
+  <iteration>2</iteration>
+  <files>
+    <file path="C:/Users/Ivan/Desktop/A-Finals/backend/tests/test_logs.py">test_real_paths_untouched now compares a stat-only snapshot (names, sizes, mtime_ns) of real logs.db and uploads/ taken at import vs now; added session autouse guard fixture repeating the check after the last test.</file>
+  </files>
+  <tests>
+    <test>Full suite: 101 passed. Real-path snapshot unchanged.</test>
+  </tests>
+  <commands_run>
+    <command>cd backend && PYTHONDONTWRITEBYTECODE=1 ../.venv/Scripts/python.exe -m pytest -p no:cacheprovider -q tests</command>
+  </commands_run>
+  <design_decisions>
+    <decision>Snapshot metadata only (no content reads) and compare; rejected asserting uploads/ is empty, which fails with the user's own files.</decision>
+    <decision>Added session-scoped autouse finalizer so the check also runs after all tests, not only mid-run.</decision>
+  </design_decisions>
+  <blocked_reason>none</blocked_reason>
+  <self_critique>Snapshot is taken at import, so pre-collection changes are not seen; mtime granularity could theoretically miss an identical-size rewrite within the same tick, unlikely.</self_critique>
+</implementation>

@@ -1,0 +1,45 @@
+<verification>
+  <iteration>1</iteration>
+  <verdict>fail</verdict>
+  <criteria>
+    <criterion id="1">met - live PUT returned 200 with {id, description, photos, created_at, updated_at}, values reflect the edit.</criterion>
+    <criterion id="2">met - blank and missing description gave 422, DB rows and files identical before/after.</criterion>
+    <criterion id="3">met - remove all gave 422; 2 kept + 4 added gave 422; state unchanged. Unit tests cover 4-of-5 removed plus 4 added.</criterion>
+    <criterion id="4">met - non-image renamed .jpg gave 422; good plus bad file gave 422 with no leftover file; oversize file gave 413; state unchanged.</criterion>
+    <criterion id="5">met - another log's photo and "../../t.db" gave 422, unchanged.</criterion>
+    <criterion id="6">met for 404 (live: no state change, no files). 500 path covered by unit tests, which passed; not exercised live.</criterion>
+    <criterion id="7">met - created_at unchanged, updated_at greater with same length/format, kept photo kept its position, new photos appended in upload order, GET equals PUT response.</criterion>
+    <criterion id="8">met - removed file deleted from temp uploads, kept and new files exist. Already-missing file case is covered by unit tests (passed).</criterion>
+    <criterion id="9">met - every failure case compared DB rows (logs and photos) plus uploads listing before/after: identical.</criterion>
+    <criterion id="10">met - the same path twice in remove_photos gave 200 and a single removal.</criterion>
+    <criterion id="11">met - description-only PUT gave 200, photos unchanged.</criterion>
+    <criterion id="12">not met - 100 pass, 1 fails: test_real_paths_untouched (see bug 1). New PUT tests exist and pass. No new __pycache__/.pytest_cache created by me; backend/__pycache__ pre-dates this run (files dated 15:20-15:32).</criterion>
+    <criterion id="13">met - real mouse click on Edit: one inline form, textarea prefilled, 2 photos each with an unchecked "Remove" checkbox, multiple file input with accept .jpg,.jpeg,.png,.webp, Save and Cancel buttons, empty hidden alert area; normal view hidden.</criterion>
+    <criterion id="14">met with a note - Save issued PUT /api/logs/2, then GET /api/logs; the post showed the new description with no form. The view shows only created_at, so there is no visible "updated state" beyond the new content. The spec wording is vague and I do not count it as a failure.</criterion>
+    <criterion id="15">met - one Remove checked plus one added file (DOM.setFileInputFiles): after reload the post had 2 photos, the removed one gone, the kept one first, the new one appended.</criterion>
+    <criterion id="16">met - removing all photos showed "a log needs between 1 and 5 photos" inside that post, and the form stayed open. Textarea text and checkbox states were preserved, and no GET /api/logs was issued. A blank description error kept the 2 chosen files and the checked boxes.</criterion>
+    <criterion id="17">met - Cancel after typing restored the original description and 2 photos and sent zero network requests.</criterion>
+    <criterion id="18">met - create via UI added the post at the top and reset the form.</criterion>
+    <criterion id="19">met - description `&lt;img src=x onerror=...&gt;` was literal text in the view (0 child elements) and in the textarea value; window.__pwn stayed unset.</criterion>
+  </criteria>
+  <test_results>
+    <result>cd backend; PYTHONDONTWRITEBYTECODE=1 ../.venv/Scripts/python.exe -m pytest -p no:cacheprovider -q tests -> 100 passed, 1 failed (test_real_paths_untouched)</result>
+    <result>Live HTTP backend script (uvicorn + create_app on temp db/uploads) -> 17 of 17 checks pass</result>
+    <result>Headless Chrome CDP script (real Input.dispatchMouseEvent clicks) -> 12 of 12 checks pass</result>
+    <result>md5 of all project files (excluding .venv and .claude) before and after my run -> identical; logs.db and the 2 real uploads untouched</result>
+  </test_results>
+  <runtime_check result="yes">
+    Started uvicorn serving create_app(temp_db, temp_uploads) from scripts in the scratchpad temp dir. Drove PUT over real HTTP with httpx. Drove the UI in headless Chrome over CDP from Node with real mouse events and DOM.setFileInputFiles. All servers and Chrome were stopped afterwards, and no listeners remain on 8765, 8766 or 9333.
+  </runtime_check>
+  <bugs>
+    <bug>
+      <description>test_real_paths_untouched asserts that the real project uploads/ folder is empty (`assert not any(models.DEFAULT_UPLOADS_DIR.iterdir())`). It fails whenever the user has real data (currently 2 png files). This is a test defect: the intent is that tests never write to the real folder, so the test should compare a snapshot of the folder (and logs.db) before and after the suite instead of requiring emptiness. It makes acceptance criterion 12 (all existing tests pass) fail in this environment.</description>
+      <reproduction>cd C:/Users/Ivan/Desktop/A-Finals/backend; PYTHONDONTWRITEBYTECODE=1 ../.venv/Scripts/python.exe -m pytest -p no:cacheprovider -q tests -> 1 failed (tests/test_logs.py line 394), 100 passed</reproduction>
+      <severity>medium</severity>
+      <owner>implementer</owner>
+    </bug>
+  </bugs>
+  <self_critique>
+    Not tested live: the 500 path (relied on unit tests), an already-missing file on disk (unit tests), exactly 5 MiB accepted, and the body-limit 413 via a large body. Concurrency was not tested. The frontend was checked only in Chrome headless, only with ASCII filenames. The test_real_paths_untouched failure is environmental in that it depends on the user's real data, but it is a genuine test defect. I could not confirm that style.css and index.html were unchanged by diff against an original, since no VCS exists. Both are unchanged by size and mtime: style.css is 0 bytes from 13:35 and index.html is dated 15:16, before the 16:02 edits. The 4 touched files carry 16:02-16:03 mtimes.
+  </self_critique>
+</verification>

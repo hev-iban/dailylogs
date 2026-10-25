@@ -1,0 +1,42 @@
+<implementation>
+  <iteration>1</iteration>
+  <files>
+    <file path="requirements.txt">fastapi==0.110 -> fastapi==0.162.0; httpx==0.27 -> httpx2==2.16.0. All other lines unchanged. No app, test, or CI file touched (git status shows only requirements.txt).</file>
+  </files>
+  <pins_changed>
+    <pin name="fastapi" from="0.110" to="0.162.0">Requested target; exists on PyPI and installs on Python 3.12. This pulls starlette 1.10.0, whose TestClient no longer uses the httpx app= shortcut or the anyio BlockingPortal alias, so the 133 original warnings are gone.</pin>
+    <pin name="httpx" from="httpx==0.27" to="httpx2==2.16.0">Forced by the warnings. With fastapi 0.162.0 and httpx 0.27 the run gave 136 passed and 1 warning: StarletteDeprecationWarning "Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead." (raised at fastapi/testclient.py:1). starlette.testclient prefers httpx2 and falls back to httpx with that warning. Nothing in backend/ imports httpx directly, so the dependency was only for TestClient and was swapped rather than added alongside.</pin>
+  </pins_changed>
+  <pins_unchanged>uvicorn==0.29, python-multipart==0.0.9, pillow==10.0, pytest==8.0, psycopg[binary]==3.3.6. All install, pip check passes, and tests pass, so none was forced (criterion 2).</pins_unchanged>
+  <resolved_versions>fastapi 0.162.0, starlette 1.10.0, httpx2 2.16.0 (httpx not installed), anyio 4.15.1, pydantic 2.14.1 (pydantic_core 2.50.1), python-multipart 0.0.9, uvicorn 0.29.0</resolved_versions>
+  <resolved_versions_before>fastapi 0.110.0, starlette 0.36.3, httpx 0.27.0, anyio 4.15.1, pydantic 2.14.1, python-multipart 0.0.9</resolved_versions_before>
+  <criteria>
+    <c n="1">fastapi==0.162.0 pinned; pip list in the fresh venv shows 0.162.0.</c>
+    <c n="2">Only the httpx line changed besides fastapi, with the reason above. Starlette, anyio and pydantic were not added. Every line is still name==version.</c>
+    <c n="3">Brand-new Python 3.12 venv, `pip install -r requirements.txt` exit 0, `pip check` reports "No broken requirements found".</c>
+    <c n="4">136 passed, 0 failed, 0 errors on Windows, with the Windows `....//` test passing too (see below). Linux/WSL/container run NOT run; CI (Linux) is expected to give 136 passed but that is unverified.</c>
+    <c n="5">`pytest -q tests -W default` captured to scratchpad t017-run2.txt: "136 passed in 35.21s", no warnings summary. grep for DeprecationWarning, BlockingPortal and "app' shortcut" gives 0 hits. Total warnings: 0 (was 133 before).</c>
+    <c n="6">No filterwarnings, -W ignore, -p no:warnings or pytest/conftest setting added. I passed only `-p no:cacheprovider` (disables the pytest cache dir, not warnings) and `-W default` on the command line, which are not committed. No tests changed; count stays 136.</c>
+    <c n="7">Windows test_uploads_traversal_refused[/uploads/....//secret.txt]: BEFORE (old venv, fastapi 0.110 / starlette 0.36.3) it FAILED; the run was 1 failed, 135 passed, 133 warnings. AFTER (starlette 1.10.0) it PASSES; the run was 136 passed, 0 warnings. The upgrade therefore resolved the Windows-only failure as a side effect. I did not fix or skip it.</c>
+    <c n="8">Fresh venvs only, both in the scratchpad (t017-old for the baseline, t017-venv for the final), never the user's .venv. Only dailylog_test on localhost:5432 was used (TEST_DATABASE_URL set, DATABASE_URL unset). No servers started, so port 8000 was not used. No databases created or dropped. logs.db and uploads/ untouched. No commit or push.</c>
+  </criteria>
+  <tests>
+    <test>Baseline on the original pins (fresh py3.12 venv): 1 failed (Windows `....//`), 135 passed, 133 warnings (132 httpx app shortcut, 1 anyio BlockingPortal).</test>
+    <test>Intermediate (fastapi 0.162.0 + httpx 0.27): 136 passed, 1 warning (StarletteDeprecationWarning, httpx -> httpx2).</test>
+    <test>Final (fastapi 0.162.0 + httpx2 2.16.0): 136 passed, 0 warnings, passes.</test>
+  </tests>
+  <commands_run>
+    <command>py -3.12 -m venv (scratchpad)/t017-old; pip install -r requirements.txt (original); pytest -q tests from backend with DATABASE_URL unset</command>
+    <command>py -3.12 -m venv (scratchpad)/t017-venv; edit requirements.txt (fastapi); pip install -r; pip check; pytest -q tests -W default</command>
+    <command>pip index versions httpx2; inspect starlette/testclient.py import logic</command>
+    <command>Recreated t017-venv from scratch; edit requirements.txt (httpx2); pip install -r; pip check; pytest -q tests -W default > t017-run2.txt; grep for deprecation text; git status --short</command>
+  </commands_run>
+  <design_decisions>
+    <decision>Replaced httpx with httpx2 instead of keeping both; keeping httpx too would be dead weight, because nothing in backend imports it and starlette prefers httpx2.</decision>
+    <decision>Rejected silencing the StarletteDeprecationWarning with a filter, as the spec and request forbid it; fixed it with the pin.</decision>
+    <decision>Left python-multipart==0.0.9 alone: starlette 1.10 works with it and emits no warning, so criterion 2 does not force a change. The alternative was a speculative bump.</decision>
+    <decision>Recreated the final venv from scratch after the httpx2 change, so the clean-install result (exit 0, pip check) is from a clean install and not an incremental one.</decision>
+  </design_decisions>
+  <blocked_reason>none</blocked_reason>
+  <self_critique>Linux behavior is unverified: the Windows pass of the `....//` test comes from newer StaticFiles code, and CI is expected, not confirmed, to give 136. anyio and pydantic float (unpinned transitive), so CI may resolve different versions than the 4.15.1 and 2.14.1 recorded here. httpx2 is a newer, less established package; it is what starlette 1.10 recommends. uvicorn 0.29 and python-multipart 0.0.9 are old but pass pip check and the suite; the app was not run under uvicorn manually (no server started, by design).</self_critique>
+</implementation>

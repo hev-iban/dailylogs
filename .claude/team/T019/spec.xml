@@ -1,0 +1,51 @@
+<spec>
+  <user_stories>
+    - As the owner, I run `docker compose up` and get the API plus Postgres 17 without installing Python or Postgres.
+    - As the owner, my entries and photos survive `docker compose down` and restarts (down without -v).
+    - As the owner, the Docker setup does not collide with my local dev server (host 8000) or local Postgres (host 5432).
+    - As a contributor, no real secrets are committed.
+  </user_stories>
+  <acceptance_criteria>
+    1. Dockerfile builds from a python:3.12 slim base, installs requirements.txt (no new or changed Python dependencies), and copies backend/ and frontend/ so that backend/ and frontend/ are siblings under one root and uploads/ resolves to that same root (matching models.PROJECT_ROOT logic). Pass: inside the container, `/` serves index.html and `/static/...` works.
+    2. The container runs uvicorn main:app from the backend directory bound to 0.0.0.0 on a fixed container port (8000). No --reload.
+    3. compose.yaml defines exactly two services: `api` (built from the Dockerfile) and `db` (image postgres:17).
+    4. `db` has a pg_isready healthcheck; `api` uses depends_on with condition: service_healthy. Pass: on a cold `up`, api starts only after db is healthy and init_db succeeds with no connection-refused crash.
+    5. `api` receives DATABASE_URL pointing at the db service by compose service name (not localhost), using the same user, password and database as the db service.
+    6. Credentials: no literal real secret in committed files. Postgres user/password/db come from `${VAR:-default}` substitution with a clearly dev-only default (password default non-empty, e.g. a placeholder), overridable via shell env or a git-ignored .env. Justification: Postgres is not published to the host, so the default is reachable only inside the compose network.
+    7. Postgres is NOT published to the host (no `ports` on db). Pass: `docker compose config` shows no host port for db, and nothing binds host 5432.
+    8. api host port defaults to a value other than 8000 and 5432 (default 8080), overridable by an env var (e.g. `${API_PORT:-8080}`), mapped to container port 8000. Pass: http://localhost:8080/ returns the page while the local dev server on 8000 is unaffected.
+    9. Two top-level named volumes: one mounted at Postgres's data dir, one mounted at the app's uploads dir (the project-root uploads folder inside the container). No bind mounts to the host repo (the repo's uploads/ is never mounted). Pass: after creating an entry with a photo, `down` then `up` (same project name) still lists the entry and serves the photo.
+    10. The api process can write to the uploads volume (photo upload via POST /api/logs returns success in the container).
+    11. .dockerignore excludes at least .git, .venv, .claude, uploads, __pycache__/*.pyc, .env, .pytest_cache, and backend/tests is not required to be excluded but may be. Pass: build context does not contain these.
+    12. README: the Dockerfile and compose.yaml rows in the project structure no longer say "Not set up yet" (short accurate descriptions), and a short "Run with Docker" section (command, URL, port override, data persistence/`down -v` warning) is added. No other README changes.
+    13. No changes to backend/, frontend/, requirements.txt, .gitignore or CI workflow. (If .env must be ignored, it already is.)
+  </acceptance_criteria>
+  <assumptions>
+    - Default host port 8080 for api; Postgres unpublished (user can add a ports entry themselves if they want host access). Chosen over asking because it is easily changed and avoids both conflicts.
+    - Default credentials via ${VAR:-default} chosen over a required env_file so `docker compose up` works with zero setup; .env remains optional.
+    - Running as root vs non-root is the implementer's call provided criterion 10 holds.
+    - Container-internal port is 8000 (isolated from the host's 8000).
+    - requirements.txt includes pytest/httpx2; installing it as-is in the image is acceptable (no dependency changes allowed).
+    - The db-name default is not `dailylog` collision-prone: compose uses its own volume, so the user's local dailylog database is never touched.
+  </assumptions>
+  <edge_cases>
+    - First start with empty volumes: init_db creates tables; uploads dir exists and is writable.
+    - api restarted while db is down: fails and is retried or reported clearly (restart policy optional).
+    - Password containing URL-special characters in DATABASE_URL (document default is URL-safe; note in README only if small).
+    - Changing POSTGRES_PASSWORD after the volume is initialized does not change the existing DB password (Postgres behaviour); README one-liner optional.
+    - Host port 8080 already in use: overridable via API_PORT.
+    - Verification must use a distinct project name (e.g. -p t019verify) so volumes are isolated from anything else.
+  </edge_cases>
+  <risks>
+    <risk severity="medium">Named uploads volume permissions if the image runs as non-root: volume may be root-owned and uploads fail.</risk>
+    <risk severity="low">Placeholder default password committed; acceptable only because db is unpublished. If user later publishes 5432, they should override it.</risk>
+    <risk severity="low">Unpinned/slim base tag drift; pin to 3.12-slim and postgres:17 to match CI.</risk>
+    <risk severity="low">Docker-daemon availability on the verifier's machine.</risk>
+  </risks>
+  <dependencies>
+    Docker Engine with Compose v2; base images python:3.12-slim and postgres:17; existing requirements.txt, backend/, frontend/; DATABASE_URL contract in backend/main.py.
+  </dependencies>
+  <self_critique>
+    Every story maps to criteria (setup: 1-5; persistence: 9-10; no conflicts: 7-8; no secrets: 6). All criteria are observable through compose config, curl, or a down/up cycle. Biggest risk: uploads volume permissions and the placeholder-password choice; port 8080 is an assumption the user may want different, though it is overridable.
+  </self_critique>
+</spec>

@@ -1,0 +1,25 @@
+<implementation>
+  <iteration>1</iteration>
+  <files>
+    <file path="backend/database.py">added get_log and update_log (replaces photo rows in order, no commit)</file>
+    <file path="backend/routes.py">added PUT /api/logs/{id}, _update, _exists; _validate_files gained a minimum param</file>
+    <file path="backend/tests/test_logs.py">added 31 PUT tests (disk effects, atomicity, 404/413/422/500)</file>
+    <file path="frontend/app.js">inline edit form (startEdit/cancelEdit), Edit button wired in renderLog</file>
+  </files>
+  <tests>
+    <test>100 pass, 1 fails: test_real_paths_untouched, because the real uploads/ already holds 2 files dated before this run (not touched by me)</test>
+  </tests>
+  <commands_run>
+    <command>PYTHONDONTWRITEBYTECODE=1 ../.venv/Scripts/python.exe -m pytest -p no:cacheprovider -q tests (cwd backend)</command>
+    <command>node --check frontend/app.js</command>
+  </commands_run>
+  <design_decisions>
+    <decision>One post in edit mode at a time (starting another edit cancels the first); rejected several-at-once because a list reload would wipe other open edits.</decision>
+    <decision>404 checked first via a cheap existence query, before parsing the body; rejected 404 only inside _update so no file reads happen for unknown ids. _update re-checks too.</decision>
+    <decision>update_log deletes and reinserts all photo rows with fresh positions; rejected per-row position updates as more code for the same result.</decision>
+    <decision>Old files deleted after commit, errors logged only; removed photo file path derived from the basename in uploads_dir.</decision>
+    <decision>Edit view hides the original children rather than removing them, so Cancel restores them untouched with no request.</decision>
+  </design_decisions>
+  <blocked_reason>none</blocked_reason>
+  <self_critique>Frontend is unverified by real clicks (only node --check). A successful create while editing reloads the list and discards the open edit. Pre-existing __pycache__ in backend/ and 2 files in real uploads/ were present before my run.</self_critique>
+</implementation>

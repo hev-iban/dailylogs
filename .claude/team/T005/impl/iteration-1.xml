@@ -1,0 +1,21 @@
+<implementation>
+  <iteration>1</iteration>
+  <files>
+    <file path="C:/Users/Ivan/Desktop/A-Finals/frontend/app.js">fetches /api/logs on load, renders via template with textContent, UTC-aware local date, /uploads/ imgs, empty and error states (error p created by JS)</file>
+    <file path="C:/Users/Ivan/Desktop/A-Finals/backend/main.py">mounts StaticFiles(uploads_dir, check_dir=False) at /uploads; imports UPLOADS_URL_PREFIX</file>
+    <file path="C:/Users/Ivan/Desktop/A-Finals/backend/tests/test_logs.py">15 new tests: serve 200 bytes-identical, 404, no listing, 10 traversal variants, absolute path, late-created dir</file>
+  </files>
+  <tests>
+    <test>70 passed (55 existing + 15 new); backend backend tests only, no browser run of app.js</test>
+  </tests>
+  <commands_run>
+    <command>cd backend; PYTHONDONTWRITEBYTECODE=1 ../.venv/Scripts/python.exe -W error::SyntaxWarning -m pytest -p no:cacheprovider -q tests</command>
+  </commands_run>
+  <design_decisions>
+    <decision>Starlette StaticFiles mount (check_dir=False) rather than a hand-written route; it handles traversal/symlinks/listing and tolerates a dir created in lifespan</decision>
+    <decision>Error element created in app.js rather than editing index.html (existing #form-error is for the form)</decision>
+    <decision>Timestamps with no offset get "Z" appended to be read as UTC</decision>
+  </design_decisions>
+  <blocked_reason>none</blocked_reason>
+  <self_critique>app.js untested in a real browser. A render exception would show the generic load error. Pre-existing logs.db and backend/__pycache__ (timestamp 15:20, before my run) are in the project and were not created by my test runs.</self_critique>
+</implementation>

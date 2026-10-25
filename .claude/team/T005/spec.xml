@@ -1,0 +1,56 @@
+<spec>
+  <user_stories>
+    <story>As a user, when I open the page I see all existing logs, newest first, without doing anything.</story>
+    <story>As a user, I see each log's description, its date in a readable local format, and its photos.</story>
+    <story>As a user with no logs, I see the empty message.</story>
+    <story>As a user, if loading fails, I see a visible error instead of a blank page.</story>
+    <story>As a user, photos actually load because the server serves the uploads directory at /uploads/.</story>
+  </user_stories>
+  <acceptance_criteria>
+    <criterion n="1">On page load (GET /), app.js issues exactly one GET /api/logs (observable in the network log or a request-counting stub server) without any user interaction.</criterion>
+    <criterion n="2">With N logs in the DB, #log-list contains exactly N li.log elements, cloned from #log-template, in the same order as the API response (newest first). The template element itself is unchanged and no li is rendered when N=0.</criterion>
+    <criterion n="3">Each li.log's p.log-description textContent equals the log's description exactly. A description such as &lt;b&gt;x&lt;/b&gt;&lt;img src=x onerror=alert(1)&gt; appears as literal text: no b/img child elements are created in the description, and no script runs/dialog appears.</criterion>
+    <criterion n="4">Each li.log's time.log-date has a datetime attribute equal to the log's created_at string verbatim, and visible text that is a non-empty human-readable local date/time (not the raw ISO string) corresponding to that instant.</criterion>
+    <criterion n="5">Each log's div.log-photos contains one img per entry in photos, in order, with a src that resolves to /uploads/&lt;filename&gt; on the same origin (e.g. img.src ends with /uploads/&lt;uuid&gt;.&lt;ext&gt;, not /uploads/uploads/... or /static/...). In a real browser each such img finishes loading (complete is true and naturalWidth &gt; 0 for a valid image). A log with zero photos has no img elements.</criterion>
+    <criterion n="6">When the API returns an empty list, #empty-message is visible (hidden attribute removed) and #log-list has no items. When logs exist, #empty-message stays hidden.</criterion>
+    <criterion n="7">When GET /api/logs fails (non-2xx status or network error/unparseable body), a visible error message element with non-empty text is shown on the page, #empty-message is not shown as if there were no logs, and no uncaught exception is the only signal. The error is not shown on success.</criterion>
+    <criterion n="8">Backend: a photo uploaded via POST /api/logs is retrievable with GET /uploads/&lt;filename&gt; returning 200 with bytes identical to the upload and an image content-type, using the uploads_dir passed to create_app (including a non-default tmp dir in tests).</criterion>
+    <criterion n="9">GET /uploads/&lt;nonexistent&gt; returns 404.</criterion>
+    <criterion n="10">Traversal is refused: requests such as /uploads/../&lt;file outside uploads dir&gt;, /uploads/%2e%2e/..., /uploads/..%2f..., and an encoded absolute path never return the content of a file outside the uploads directory (response is 4xx, verified with a sentinel file placed beside the uploads dir). The uploads directory listing itself is not exposed (GET /uploads/ is not 200 with a listing).</criterion>
+    <criterion n="11">Existing behaviour is intact: GET / still returns index.html, /static/ still serves frontend files, POST/GET /api/logs unchanged, and all 55 existing tests plus the new tests pass.</criterion>
+    <criterion n="12">Edits are limited to frontend/app.js, backend/main.py, backend/tests/test_logs.py (index.html only if needed for an error element; models.py only for a constant). No new files. style.css, docs and Docker untouched. After tests, the project contains no stray DB, uploads files, __pycache__ or .pytest_cache.</criterion>
+    <criterion n="13">app.js is plain JavaScript with no libraries or build step, and does not use innerHTML (or equivalent) with user-supplied data. Edit/Delete buttons are rendered in each log but have no behavior; the create form is not wired.</criterion>
+  </acceptance_criteria>
+  <assumptions>
+    <assumption>photos in the API are "uploads/&lt;file&gt;" (relative, no leading slash); the frontend must turn them into a same-origin absolute path "/uploads/&lt;file&gt;" so it works regardless of page URL.</assumption>
+    <assumption>Error display uses either a new element created by app.js or a minimal addition to index.html; the implementer chooses, provided it is visible and does not depend on style.css (empty).</assumption>
+    <assumption>"Readable local format" means any locale-formatted date/time via the browser's built-in facilities; exact format is not tested beyond being non-ISO and non-empty.</assumption>
+    <assumption>created_at is a UTC ISO string possibly lacking an explicit offset; the displayed local time must treat it as UTC.</assumption>
+    <assumption>The error message should also clear/replace on re-render; since there is no retry in this stage, a single load attempt is enough.</assumption>
+    <assumption>Photo img elements get an alt attribute (e.g. generic text); not tested.</assumption>
+  </assumptions>
+  <edge_cases>
+    <case>Description containing HTML, quotes, ampersands, newlines, or very long unbroken text.</case>
+    <case>Log with zero photos; log with several photos.</case>
+    <case>created_at without a trailing Z or offset (must still be read as UTC); invalid date string should not crash the render of other logs.</case>
+    <case>Empty list vs. failed request are distinct states.</case>
+    <case>Filenames with unusual characters should be URL-safe in src.</case>
+    <case>Traversal variants: raw .., percent-encoded .., backslash forms (Windows host), absolute paths, symlinks/junctions leading out of the directory.</case>
+    <case>Uploads directory not existing at app creation time (should not crash app startup or break other routes).</case>
+    <case>Backend serving /uploads must not shadow /api or /static routes.</case>
+  </edge_cases>
+  <risks>
+    <risk severity="medium">Windows path handling may let backslash or drive-letter traversal slip past naive checks; tests must cover these.</risk>
+    <risk severity="medium">Mounting a static file handler at create_app time when uploads_dir is created lazily or later could fail or serve a stale path.</risk>
+    <risk severity="low">Treating a timezone-less ISO timestamp as local time shows the wrong time.</risk>
+    <risk severity="low">Verifier needs a real image to confirm naturalWidth &gt; 0; a stub non-image file would load as broken.</risk>
+  </risks>
+  <dependencies>
+    <dependency>Existing backend (create_app, routes, models, database) and its web framework's static-file facilities, with no new packages if avoidable.</dependency>
+    <dependency>frontend/index.html element ids: log-list, empty-message, log-template and its inner classes.</dependency>
+    <dependency>Browser fetch/DOM APIs; a real browser or headless page for the UI criteria.</dependency>
+  </dependencies>
+  <self_critique>
+    Every story maps to criteria: load/order (1,2), description/date/photos (3-5), empty (6), error (7), serving (8-10). Criteria 1-7 are checkable in a headless browser against a running app; 8-11 via the test suite. The biggest risk is traversal behavior on Windows and the exact definition of "visible error" without CSS; both are specified by observable outcomes rather than mechanisms. No blocking ambiguity remained.
+  </self_critique>
+</spec>

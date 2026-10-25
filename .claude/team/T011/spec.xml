@@ -1,0 +1,60 @@
+<spec>
+  <user_stories>
+    <story>As a user, I can switch between light and dark theme with a button at the upper right of the header.</story>
+    <story>As a returning user, my chosen theme is remembered and shown from the first paint, with no flash of the other theme.</story>
+    <story>As a first-time user, the page follows my system light/dark setting as it does today.</story>
+    <story>As a keyboard or screen-reader user, I can reach and operate the switch and know what it does.</story>
+  </user_stories>
+  <acceptance_criteria>
+    <c n="1">Exactly one new button (a real button element) exists inside the sticky header. Its bounding rect is on the same row as the h1 "DailyLog" (vertical centers differ by 4px or less) and its right edge is within 24px of the right edge of the header content box. Holds at 1280px and at 360px (Emulation.setDeviceMetricsOverride), with document.documentElement.scrollWidth &lt;= viewport width and no overlap between the button rect and the h1 rect.</c>
+    <c n="2">Button width and height are each &gt;= 24 CSS px. It shows a visible glyph or text (moon/sun, no image files, no external icon library) that is not empty and not clipped.</c>
+    <c n="3">First visit (localStorage empty): with prefers-color-scheme emulated as light, the page's computed --bg is #ffffff-equivalent; emulated dark gives the #000000-equivalent. Computed colors of body, header, textarea, and buttons equal what they are today for each system setting.</c>
+    <c n="4">With the system emulated as light, clicking the switch makes the page dark: html carries an attribute (e.g. data-theme="dark"), body background computes to the existing dark --bg, body text to the dark --text. With the system emulated as dark, clicking makes the page light (light --bg, light --text). Both directions work, and the page does not change when the emulated system setting is changed afterward.</c>
+    <c n="5">A second click returns to the first theme. Only two states exist; there is no "system" option.</c>
+    <c n="6">After a click, localStorage holds the chosen value ("light" or "dark") under one key. After reload, the page renders that theme even when the emulated system setting is the opposite.</c>
+    <c n="7">No flash: on reload with a saved theme opposite to the system setting, the theme attribute is already present on html at the time of the first paint, before app.js runs (checkable by evaluating on a new document / reading html attribute from a script run at DOMContentLoaded or earlier, or a first screenshot that shows the saved theme). The inline head script, if used, has its reason recorded in a comment.</c>
+    <c n="8">If localStorage throws on read and on write (e.g. overridden to throw before page scripts), the page loads without a console error, follows the system setting, and the switch still toggles the theme for the session.</c>
+    <c n="9">Accessible name: the button has a non-empty accessible name that states what it does or its state (e.g. aria-label "Switch to dark theme" while light, "Switch to light theme" while dark; or a fixed label with aria-pressed). It is updated after each click, in the same click, and matches the current theme at load. Glyph text, if any, is hidden from assistive tech or consistent with the name.</c>
+    <c n="10">Keyboard: the first Tab press from page load focuses the theme switch, the second Tab focuses the description textarea. Enter and Space (real key events) each toggle the theme. Focus stays on the button after toggling.</c>
+    <c n="11">States match T008: at rest the button has a visible border or fill distinguishing it from the header (not plain text); hover style exists only inside (hover: hover) and (pointer: fine); :focus-visible shows a 3px outline with offset using the theme's --focus color; :active gives immediate feedback (background change and/or shrink). All of these hold in both themes.</c>
+    <c n="12">Contrast, in both themes and for both ways of choosing the theme (system-derived and explicit): glyph/icon color against the button's effective background is &gt;= 3:1, any visible text is &gt;= 4.5:1, and the button border or fill against the header is &gt;= 3:1 if the border is what identifies the control. The focus ring against the header background is &gt;= 3:1.</c>
+    <c n="13">Existing results hold whichever way the theme was chosen: computed color/background of the counter (normal and over-limit), limit message, form-error, edit-error, delete button, edit/cancel buttons, Save, muted text, and borders are identical for "dark via system" and "dark via explicit choice", and likewise for light. Text contrast &gt;= 4.5:1 for these in all four combinations (light/dark, system/explicit).</c>
+    <c n="14">Native controls follow the chosen theme: the computed color-scheme on html is "light" when light is chosen and "dark" when dark is chosen (so file input, textarea and scrollbars match), including when it opposes the system setting.</c>
+    <c n="15">Behavior unchanged: loading and rendering posts, create, edit, delete, error wording, the 200-character counter/limit, the aria-busy loading indicator, and reduced-motion support still work. With prefers-reduced-motion: reduce emulated, the switch has no transition or animation (computed transition-duration 0s or none).</c>
+    <c n="16">Only frontend/index.html, frontend/style.css and frontend/app.js are changed. No new files, no external fonts, libraries or CDNs. Backend files are unchanged and its 130 tests pass.</c>
+    <c n="17">Verification does not touch the real logs.db or uploads/. The temp server uses a free port other than 8000 (checked with netstat), and GET /api/logs on it returns [] before any write. Only processes started by the verifier are killed.</c>
+  </acceptance_criteria>
+  <assumptions>
+    <a>Orchestrator defaults apply: one button, two states, localStorage key "dailylog-theme" (exact key not tested; tests read whatever single key changes), attribute on html (name not fixed, but it must be on the html element).</a>
+    <a>The toggle switches to the opposite of the currently displayed theme, so on first click the result is the opposite of the system theme.</a>
+    <a>Glyph choice (moon/sun or text) is the implementer's; the glyph may show the target or current theme as long as the accessible name is unambiguous.</a>
+    <a>The saved value is trusted only if it is exactly "light" or "dark"; anything else is ignored and the system setting is used.</a>
+    <a>The header keeps its existing height and sticky behavior; the h1 may not shrink below fitting "DailyLog" on one line at 360px.</a>
+  </assumptions>
+  <edge_cases>
+    <e>Saved value invalid (e.g. "blue"): ignored, system setting applies, no error.</e>
+    <e>localStorage throws on read or on write: session toggle still works (criterion 8).</e>
+    <e>System setting changes while the page is open with no saved choice: page follows it as today. With a saved or session choice: choice wins.</e>
+    <e>Rapid repeated clicks: final theme and accessible name stay consistent with each other.</e>
+    <e>Theme toggled while an edit form is open or a save is in flight: no loss of typed text, no change to busy/disabled state.</e>
+    <e>Sticky header over scrolled content: button stays in the upper right and usable.</e>
+    <e>Forced-colors mode: button remains visible and distinguishable (system colors).</e>
+  </edge_cases>
+  <risks>
+    <risk severity="medium">The existing dark token list lives only inside a media query. Letting an explicit choice override it in both directions risks duplicating tokens or leaving color-scheme and some tokens out of sync (criteria 13, 14).</risk>
+    <risk severity="medium">Flash of wrong theme if the attribute is applied only from app.js at the end of body (criterion 7).</risk>
+    <risk severity="low">Button plus h1 at 360px could overflow or crowd the header.</risk>
+    <risk severity="low">Contrast of the new button's border/glyph in one theme may be missed if only one theme is measured.</risk>
+    <risk severity="low">An inline head script adds a second place where the theme logic lives; it must agree with the toggle in app.js.</risk>
+  </risks>
+  <dependencies>
+    <d>C:/Users/Ivan/Desktop/A-Finals/frontend/index.html</d>
+    <d>C:/Users/Ivan/Desktop/A-Finals/frontend/style.css</d>
+    <d>C:/Users/Ivan/Desktop/A-Finals/frontend/app.js</d>
+    <d>Backend: read-only, unchanged</d>
+    <d>Headless Chrome with CDP: Emulation.setEmulatedMedia, setDeviceMetricsOverride, Input.dispatchKeyEvent/dispatchMouseEvent, Page.addScriptToEvaluateOnNewDocument, Runtime.evaluate</d>
+  </dependencies>
+  <self_critique>
+    Stories: switch (1,2,4,5), persistence and no flash (6,7,8), first visit (3), accessibility (9,10,11,12). Constraints are in 13-17. All criteria are checkable by computed style, DOM attributes, localStorage, key events and rects. Biggest risk: criterion 13 requires comparing system-derived and explicit themes token by token; a missed token produces a subtle mismatch. Criterion 7 can only be checked approximately in headless mode (attribute presence before app.js, not true paint timing). No blocking ambiguity remains; the orchestrator defaults cover the open choices.
+  </self_critique>
+</spec>

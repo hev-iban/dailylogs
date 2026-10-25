@@ -1,0 +1,51 @@
+<spec>
+  <user_stories>
+    <story>As a user, I can delete a post from the list so it no longer appears.</story>
+    <story>As a user, deleting a post also removes its uploaded photos from disk.</story>
+    <story>As a user, I am asked to confirm before a post is deleted, and cancelling changes nothing.</story>
+    <story>As a user, if deletion fails I see the reason on that post and the post stays.</story>
+    <story>As a user, deleting while editing (this post or another) leaves no broken edit state.</story>
+  </user_stories>
+  <acceptance_criteria>
+    <c n="1">Backend: DELETE /api/logs/{id} for an existing log returns 200 or 204 (implementer picks, recorded in tests). Afterward GET /api/logs does not list it; its logs row and all its photos rows are gone (checked in the temp DB).</c>
+    <c n="2">Every photo file of the deleted log is removed from the temp uploads dir (checked with os.path.exists on each path). Files of other logs remain byte-identical and their log/photo rows are unchanged.</c>
+    <c n="3">Unknown id returns 404 with a detail message; DB rows and uploads dir unchanged (snapshot before/after).</c>
+    <c n="4">Non-integer id (e.g. "abc") returns 422 or 404 (recorded in tests); nothing changed.</c>
+    <c n="5">If one or more photo files are already missing on disk, DELETE still succeeds with the success status, the rows are removed, and the remaining files are deleted.</c>
+    <c n="6">If file removal raises an error after the DB commit (simulated, e.g. patched os.remove raising OSError), the response is still the success status (not 500), and the log stays deleted (GET no longer lists it).</c>
+    <c n="7">If the DB raises an unexpected error during deletion (simulated), the response is 500, the log and its photo rows remain, and no photo files are deleted.</c>
+    <c n="8">A log with zero photos deletes successfully. Deleting the same id twice yields success then 404.</c>
+    <c n="9">Existing endpoints (POST, GET, PUT /api/logs) behave as before; all 101 existing tests still pass plus new tests covering criteria 1-8. test_real_paths_untouched passes, and tests use only temp paths for DB and uploads.</c>
+    <c n="10">Frontend, cancel: in headless Chrome, with a post present, click its Delete button; a confirm dialog opens. Dismissing it (Page.handleJavaScriptDialog accept=false) sends no DELETE request (observable via network log or server log) and the post remains in the list.</c>
+    <c n="11">Frontend, confirm: clicking Delete and accepting the dialog sends DELETE /api/logs/{id} for that post; afterward the list reloads and the post is gone while other posts remain. Deleting the last remaining post shows the existing empty-list message. Photo files are gone from the (temp) uploads dir.</c>
+    <c n="12">Frontend, failure: when the DELETE returns an error (e.g. the post was already deleted via the API so it returns 404, or request intercepted to return an error), the API detail text is visibly shown within that post's element, the post stays in the list, and the Delete button is re-enabled.</c>
+    <c n="13">Frontend, in-flight: while the DELETE request is pending (e.g. delayed via CDP request interception or slow response), that post's Delete button has the disabled property true; it is not disabled before and after (on failure).</c>
+    <c n="14">Frontend, edit state: with post A in edit mode, confirm-deleting A removes it and no edit form/state remains (a subsequent Edit click on another post opens normally). With post A in edit mode, confirm-deleting a different post B reloads the list without leaving a stale or duplicated edit form; the result is consistent (either A still shows a working edit form or A is shown in normal view, with no errors in the console), and Edit on any post afterwards works. Cancelling the confirm leaves any open edit form intact with its typed values.</c>
+    <c n="15">Only backend/routes.py, backend/database.py, backend/tests/test_logs.py, frontend/app.js are modified. frontend/index.html and frontend/style.css (empty) are unchanged; no new files, no new __pycache__ or .pytest_cache left behind, the real logs.db and uploads/ are untouched.</c>
+  </acceptance_criteria>
+  <assumptions>
+    <a>Success status 200 vs 204 and 422 vs 404 for a non-integer id are implementer choices, which must be recorded in tests.</a>
+    <a>Only the confirm-dialog text is unspecified; any non-empty message is acceptable.</a>
+    <a>For criterion 14, deleting B while A is in edit mode: the request left this either preserving A's edit form or resetting it; both are acceptable provided state is consistent and not stale (the user's unsaved edit text may be lost on reload).</a>
+    <a>Failure message display reuses whatever per-post error mechanism exists in app.js, or any visible element inside the post.</a>
+  </assumptions>
+  <edge_cases>
+    <e>Photo file missing on disk; file removal error after commit; DB error mid-delete.</e>
+    <e>Log with no photos; double delete; unknown or non-integer id.</e>
+    <e>Photo paths that are stored relative to uploads: deletion must never remove anything outside the uploads dir.</e>
+    <e>Rapid double-click on Delete while in flight sends only one request.</e>
+    <e>Network failure (fetch rejects) on the frontend shows a visible message and re-enables the button.</e>
+  </edge_cases>
+  <risks>
+    <risk severity="medium">Real user data lives in logs.db and uploads/; any test or verification run against the default paths would destroy posts. Verification must use temp paths.</risk>
+    <risk severity="medium">Stored photo paths may be manipulated or malformed; deleting files from them risks removing files outside uploads/.</risk>
+    <risk severity="low">Module-level edit state in app.js can go stale after a list reload.</risk>
+  </risks>
+  <dependencies>
+    <d>Existing backend/routes.py, database.py, main.py, models.py, tests/test_logs.py, frontend/app.js, index.html.</d>
+    <d>Headless Chrome with CDP for the frontend checks.</d>
+  </dependencies>
+  <self_critique>
+    Every story maps to criteria: delete (1,11), photos (2,5,6), confirm/cancel (10,11), failure (7,12), edit state (14). Criteria are observable. The biggest uncertainty is criterion 14 where the exact edit-state outcome for deleting a different post is left flexible, and the path-safety edge case, which has no explicit criterion beyond the isolation check in criterion 2.
+  </self_critique>
+</spec>

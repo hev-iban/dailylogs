@@ -1,0 +1,23 @@
+<implementation>
+  <iteration>1</iteration>
+  <files>
+    <file path="backend/models.py">added FRONTEND_DIR = PROJECT_ROOT / "frontend" (cwd-independent)</file>
+    <file path="backend/routes.py">APIRouter(prefix="/api") so routes are /api/logs</file>
+    <file path="backend/main.py">added GET / (FileResponse index.html) and StaticFiles mount at /static</file>
+    <file path="frontend/index.html">two refs changed to /static/style.css and /static/app.js</file>
+    <file path="backend/tests/test_logs.py">retargeted to /api/logs; added tests for /, static assets, static 404, old /logs 404</file>
+  </files>
+  <tests>
+    <test>55 passed (50 retargeted + 5 new covering criteria 1, 2, 5)</test>
+  </tests>
+  <commands_run>
+    <command>cd backend; PYTHONDONTWRITEBYTECODE=1 ../.venv/Scripts/python.exe -m pytest -p no:cacheprovider tests -q</command>
+  </commands_run>
+  <design_decisions>
+    <decision>Router prefix "/api" rather than editing each decorator path; rejected repeating "/api/logs" literals.</decision>
+    <decision>FRONTEND_DIR constant in models.py beside PROJECT_ROOT; rejected recomputing the path in main.py.</decision>
+    <decision>Explicit FileResponse route for "/" rather than StaticFiles(html=True) at root, which would shadow routes.</decision>
+  </design_decisions>
+  <blocked_reason>none</blocked_reason>
+  <self_critique>Old-path 404 relies on no catch-all route; verified by test. Pre-existing empty uploads/ dir remains (required by test_real_paths_untouched); no db or cache files found.</self_critique>
+</implementation>
