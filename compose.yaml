@@ -1,0 +1,32 @@
+services:
+  api:
+    build: .
+    environment:
+      # Host is the compose service name "db", not localhost.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dailylog}:${POSTGRES_PASSWORD:-dev-only-change-me}@db:5432/${POSTGRES_DB:-dailylog}
+    ports:
+      - "${API_PORT:-8080}:8000"
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17
+    # No ports: Postgres is reachable only inside the compose network.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dailylog}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-only-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-dailylog}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:
+  uploads:
