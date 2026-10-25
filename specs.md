@@ -8,9 +8,9 @@ runs locally, so there is no login or logout.
 
 | Layer | Choice |
 |---|---|
-| Backend | Python, FastAPI (API and request validation), Pillow (image checks) |
+| Backend | Python, FastAPI (API), Pydantic (description validation), Pillow (image checks) |
 | Database | PostgreSQL (descriptions, timestamps, photo paths) |
-| Photo storage | `uploads/` folder on disk |
+| Photo storage | `uploads/` folder on disk (a named volume when run with Docker) |
 | Frontend | HTML, CSS, JavaScript, talking to the backend over HTTP |
 | Tests | pytest |
 
@@ -42,8 +42,9 @@ The description is stored trimmed. Its length is counted in characters, so an em
 accented letter counts as one.
 
 When a request breaks several rules, the response follows this order: request over 26 MiB
-(413), then request shape such as description, photo count or extension (422), then a photo
-over 5 MiB (413), then empty, corrupt or unsupported image content (422).
+(413), then, on edit, an unknown log id (404), then request shape such as description, photo
+count or extension (422), then a photo over 5 MiB (413), then empty, corrupt or unsupported
+image content (422).
 
 Additional guarantees:
 
@@ -72,7 +73,8 @@ Create and edit take `multipart/form-data`. All other responses are JSON, except
 | `DELETE` | `/api/logs/{id}` | Delete a log and its photos | 204 |
 
 - An unknown log id returns 404 `log not found`. A non-integer id returns 422.
-- On edit, a `remove_photos` value that is not a photo of that log returns 422.
+- On edit, a `remove_photos` value that is not a photo of that log returns 422
+  `remove_photos must be photos of this log`.
 - A missing photo, or any path outside `uploads/`, returns 404.
 
 Errors always have the form `{"detail": "<message>"}`. Examples:
@@ -83,8 +85,10 @@ Errors always have the form `{"detail": "<message>"}`. Examples:
 | 422 | `description must be at most 200 characters` |
 | 422 | `at least 1 photo is required` / `at most 5 photos are allowed` |
 | 422 | `a log needs between 1 and 5 photos` (edit) |
+| 422 | `photos must be file parts` / `each photo needs a filename` |
+| 422 | `remove_photos must be photos of this log` / `remove_photos must be text values` (edit) |
 | 422 | `unsupported file type; use jpg, jpeg, png or webp` |
-| 422 | `invalid or corrupt image` |
+| 422 | `empty file` / `invalid or corrupt image` / `unsupported image format` |
 | 413 | `photo exceeds 5 MiB` / `request body too large` |
 | 404 | `log not found` |
 | 500 | `internal server error` |
