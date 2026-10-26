@@ -16,7 +16,7 @@ import warnings
 from contextlib import closing
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 from PIL import Image
@@ -24,9 +24,10 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
 import database
-from models import (ALLOWED_EXTENSIONS, ALLOWED_FORMATS, MAX_DESCRIPTION_CHARS,
-                    MAX_PHOTO_BYTES, MAX_PHOTOS, MIN_PHOTOS, UPLOADS_URL_PREFIX,
-                    DescriptionIn, LogOut)
+from models import (ALLOWED_EXTENSIONS, ALLOWED_FORMATS, DEFAULT_LIST_LIMIT,
+                    MAX_DESCRIPTION_CHARS, MAX_LIST_LIMIT, MAX_LIST_OFFSET,
+                    MAX_PHOTO_BYTES,
+                    MAX_PHOTOS, MIN_PHOTOS, UPLOADS_URL_PREFIX, DescriptionIn, LogOut)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
@@ -216,15 +217,19 @@ def _exists(database_url, log_id) -> bool:
         return database.get_log(conn, log_id) is not None
 
 
-def _list(database_url) -> list[dict]:
+def _list(database_url, limit, offset) -> list[dict]:
     with closing(database.connect(database_url)) as conn:
-        return database.list_logs(conn)
+        return database.list_logs(conn, limit, offset)
 
 
 @router.get("/logs", response_model=list[LogOut])
-async def list_logs(request: Request):
+async def list_logs(request: Request, limit: int = Query(DEFAULT_LIST_LIMIT, ge=1),
+                    offset: int = Query(0, ge=0, le=MAX_LIST_OFFSET)):
+    # limit below 1 or non-integer: 422; above the maximum: clamped.
+    # offset below 0, non-integer or beyond the database's bigint: 422.
+    limit = min(limit, MAX_LIST_LIMIT)
     try:
-        return await run_in_threadpool(_list, request.app.state.database_url)
+        return await run_in_threadpool(_list, request.app.state.database_url, limit, offset)
     except Exception:
         logger.exception("list_logs failed")
         return JSONResponse({"detail": "internal server error"}, status_code=500)

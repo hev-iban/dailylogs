@@ -15,6 +15,11 @@ MAX_PHOTOS = 5
 MAX_PHOTO_BYTES = 5 * 1024 * 1024
 # Counted in characters (code points) after trimming; the minimum is 1 (non-blank).
 MAX_DESCRIPTION_CHARS = 200
+# GET /api/logs page size: used when no limit is given; larger limits are clamped.
+DEFAULT_LIST_LIMIT = 5
+MAX_LIST_LIMIT = 20
+# GET /api/logs offset: >= 0 and at most the PostgreSQL bigint maximum (larger is 422).
+MAX_LIST_OFFSET = 2**63 - 1
 # 5 photos x 5 MiB plus 1 MiB for multipart framing and the description.
 MAX_REQUEST_BYTES = MAX_PHOTOS * MAX_PHOTO_BYTES + 1024 * 1024
 
