@@ -18,3 +18,5 @@ T017 | pipeline | user-verified | done
 T018 | pipeline | user-verified | done
 T019 | pipeline | user-verified | done
 T020 | direct | user-verified | done
+T021 | pipeline | user-verified | done
+T022 | direct | user-verified | done

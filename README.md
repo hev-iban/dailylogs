@@ -97,7 +97,7 @@ TEST_DATABASE_URL=postgresql://postgres@localhost:5432/dailylog_test python -m p
 The tests use the `_test` database and a temporary uploads folder, so they never touch your real entries.
 A guard in `conftest.py` fails the run if your real `uploads/` change.
 
-GitHub Actions runs the same suite on pushes to `main` and on pull requests
+GitHub Actions runs the same suite on every push, to any branch, and on pull requests
 (`.github/workflows/tests.yml`).
 
 | File | Covers |
@@ -108,6 +108,7 @@ GitHub Actions runs the same suite on pushes to `main` and on pull requests
 | `test_logs.py` | Creating, listing, updating and deleting entries |
 | `test_photos.py` | Photo uploads, file paths, image serving, multiple photos |
 | `test_validation.py` | Descriptions, formats, file sizes, invalid image data |
+| `test_concurrent_update.py` | Row locking of edits: blocking, validation against committed photos, no stray files |
 | `test_description_model.py` | The Pydantic description model: trimming, character counting, error messages |
 | `test_database.py` | PostgreSQL persistence, ordering, rollback, missing `DATABASE_URL`, log and photo relationships |
 

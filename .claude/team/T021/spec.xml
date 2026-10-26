@@ -1,0 +1,56 @@
+<spec>
+  <user_stories>
+    <story>As the owner, when two edits of the same log run at the same time, each edit is validated against the photo list left by the previous committed edit, so the log never ends with photo rows pointing to missing files.</story>
+    <story>As the owner, a failed or rejected edit leaves no stray uploaded files and no lock held on the log.</story>
+    <story>As the owner, an edit that races with a delete of the same log returns 404 and leaves no new files on disk.</story>
+    <story>As a maintainer, the concurrency behaviour is covered by deterministic tests that cannot hang the suite.</story>
+  </user_stories>
+  <acceptance_criteria>
+    <criterion n="1">The edit operation locks the target log row (PostgreSQL row lock, SELECT ... FOR UPDATE) as the first statement of its transaction, before the photo rows are read. Test: with a separate test connection holding the lock on the log, an edit request started in a thread does not complete (still blocked after a bounded wait); it completes only after the holder commits or rolls back.</criterion>
+    <criterion n="2">The lock is held until the edit's transaction commits or rolls back, and the validation, the new-photo database changes and the commit all happen in that same transaction. Test: a second edit started while the first is in progress does not read the photo list until the first has committed.</criterion>
+    <criterion n="3">A waiting edit sees the photos committed by the edit that held the lock. Test: the holder connection changes the log's photos (replaces a photo row) and commits; the waiting edit, which removes the photo path that was replaced, returns 422 "remove_photos must be photos of this log", and the log and uploads are unchanged by the waiting edit.</criterion>
+    <criterion n="4">Two concurrent edits that both remove the same photo of one log: exactly one returns 200, the other returns 422 "remove_photos must be photos of this log". No status other than 200 and 422 occurs.</criterion>
+    <criterion n="5">The user's stated test: two concurrent edits of one log that each add a new photo (and/or remove different photos), staying within 1..5 photos. After both finish, every photo row's path points to an existing file in uploads, and every file in uploads is referenced by a photo row (no unreferenced files). Repeating the run several times gives the same result.</criterion>
+    <criterion n="6">If an edit waits on the lock and the log is then deleted and the delete commits, the edit returns 404 "log not found", and uploads contains no file written by that edit (the uploads folder is empty after the delete's own file removal).</criterion>
+    <criterion n="7">Unknown id: an edit of a non-existent log still returns 404 "log not found" with no files written.</criterion>
+    <criterion n="8">Every early-exit path (404, 422 for remove_photos, 422 for photo count) and every failure path ends the transaction so the row lock is released. Test: after such a rejected edit, another connection can lock and update the same log immediately without blocking (bounded by a timeout). The implementation or its notes states whether this is by explicit rollback or by connection close, and why.</criterion>
+    <criterion n="9">Existing guarantees are unchanged: a rejected or failed edit changes neither the log nor any files; new files written by a failed edit are removed; photos removed by a successful edit are deleted from disk only after the commit; kept photos stay in order; updated_at is refreshed on success; the API contract, status codes and error messages in specs.md are unchanged. The full existing test suite still passes.</criterion>
+    <criterion n="10">Locking and database-level changes stay in database.py following the existing convention (plain SQL with %s placeholders, no commit inside database.py functions, the caller owns the transaction). No new dependencies, no new features.</criterion>
+    <criterion n="11">All new tests use TEST_DATABASE_URL and the temporary uploads folder only; no sleep is used as synchronisation, and every thread join, wait and lock acquisition has a timeout so a broken lock fails the test rather than hangs it. Tests do not use port 8000 or the real dailylog database or uploads/.</criterion>
+    <criterion n="12">specs.md is updated (edit section and status codes only) to state that concurrent edits of one log are serialized and that a later edit is validated against the earlier edit's committed photos, with the resulting 404/422 outcomes. README.md is updated only if it describes this behaviour.</criterion>
+  </acceptance_criteria>
+  <assumptions>
+    <assumption>The 404 for an unknown id in the PUT endpoint's pre-check (_exists) stays; the lock in the update step re-checks existence and returns 404 if the row disappeared in between.</assumption>
+    <assumption>specs.md already says an unknown remove_photos value returns 422 and an unknown log returns 404; the concurrent outcomes in criteria 3, 4 and 6 follow from those rules, so no API contract change is needed. Only a clarifying note is added.</assumption>
+    <assumption>Photos added by concurrent edits are cumulative (the second edit keeps the first edit's new photos). If that pushes the total over 5, the second edit returns the existing 422 "a log needs between 1 and 5 photos". This is correct behaviour, not a bug.</assumption>
+    <assumption>Request-body reading and image validation happen before the lock, so the lock is held only during the database and file-write phase. Wait time for a blocked edit is not bounded by the app; PostgreSQL lock_timeout is not added (it would be a new behaviour).</assumption>
+    <assumption>Delete needs no code change: its DELETE already takes the row lock and serializes with a locked edit.</assumption>
+    <assumption>Edits of different logs do not block each other.</assumption>
+  </assumptions>
+  <edge_cases>
+    <case>Both edits remove the same photo: one 200, one 422.</case>
+    <case>The log is deleted while an edit is waiting: 404, new files removed or never written, no leftovers.</case>
+    <case>The edit's validation fails after acquiring the lock: no files written, lock released.</case>
+    <case>A database or disk error after new files are written: files removed, rollback, 500, lock released.</case>
+    <case>Two edits that together would exceed 5 photos: the later one returns 422 and writes no files.</case>
+    <case>Edit with no new photos and no removals (description only) under contention.</case>
+    <case>Unlinking old files after commit fails: logged, edit still succeeds (existing behaviour).</case>
+    <case>A new file cleanup failure must not mask the original error (existing behaviour).</case>
+  </edge_cases>
+  <risks>
+    <risk severity="medium">Concurrent-test flakiness: proving that a request is blocked requires a bounded wait, which is time-based by nature. Mitigation: poll for the blocked state (for example via pg_locks or pg_stat_activity on the test database) with a timeout instead of sleeping a fixed time.</risk>
+    <risk severity="medium">TestClient and the threadpool: running two requests in parallel threads against one TestClient may serialize or behave unexpectedly; the test must really have two overlapping transactions or it proves nothing.</risk>
+    <risk severity="low">Holding a connection open while writing files means a slow disk lengthens lock time; acceptable for a single-user app.</risk>
+    <risk severity="low">Files are not covered by the transaction: a crash between commit and old-file removal can leave an unreferenced file. This is existing behaviour and out of scope.</risk>
+  </risks>
+  <dependencies>
+    <dep>backend/routes.py (_update, _delete, update_log endpoint)</dep>
+    <dep>backend/database.py (new lock helper, get_log, update_log)</dep>
+    <dep>backend/tests/conftest.py (env, make_log, put, rows, snapshot, make_image helpers)</dep>
+    <dep>specs.md (edit section and status codes); README.md only if it describes edit behaviour</dep>
+    <dep>PostgreSQL test database via TEST_DATABASE_URL; threading from the standard library; no new packages</dep>
+  </dependencies>
+  <self_critique>
+    Every story maps to criteria: story 1 to 1-5, story 2 to 7-9, story 3 to 6, story 4 to 11. Each criterion has an observable pass/fail condition. The biggest remaining risk is the test design: criterion 5 passes even without the lock if the two requests do not truly overlap, so the deterministic criteria 1-3 are what actually prove the fix. Criterion 4 also depends on real overlap; it is valid only together with criterion 3. The statement about explicit rollback versus connection close is left to the implementer.
+  </self_critique>
+</spec>

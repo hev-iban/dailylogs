@@ -1,0 +1,39 @@
+<verification>
+  <iteration>1</iteration>
+  <verdict>pass</verdict>
+  <note>REVIEW ONLY. Nothing was executed: no pytest, no Postgres, no server, no Docker (user's decision). Only py_compile (ok on routes.py, database.py, test_concurrent_update.py) and a line-length check (no line over 99 chars). pyflakes is not installed. All "met" below mean met by reading the code, not by observed behaviour.</note>
+  <criteria>
+    <criterion id="1">met by reading; runtime cannot be confirmed without running. routes.py _update: database.lock_log(conn, log_id) is the first statement inside the try (before get_log). database.py lock_log runs "SELECT id FROM logs WHERE id = %s FOR UPDATE". The pre-check _exists (routes.py:214) is a separate connection and does not lock. Test test_edit_blocks_until_holder_ends (test file :78-87) holds the lock, waits for a Lock waiter, asserts the thread is alive, releases, expects 200.</criterion>
+    <criterion id="2">met by reading. get_log, validation, file writes, update_log and commit are all in the one try after the lock on a single connection. Covered indirectly by the holder-based tests; no test starts two real edits that overlap without a holder, which the spec design accepts.</criterion>
+    <criterion id="3">met by reading; cannot confirm without running. test_waiting_edit_sees_photos_committed_by_holder (:90-109): holder replaces the photo path and commits, the waiter returns 422 with the exact message; the snapshot comparison (log row and file names) checks that nothing else changed. Row-shape handling (snapshot returns ((logs, photos), files)) is correct.</criterion>
+    <criterion id="4">met by reading; cannot confirm without running. test_two_edits_removing_same_photo_one_wins (:112-123) uses two threads, waits for 2 lock waiters, expects sorted codes [200, 422], and checks files match rows.</criterion>
+    <criterion id="5">met by reading; cannot confirm without running. test_two_concurrent_edits_leave_no_orphans (:126-144) runs 3 rounds, each with 2 waiters forced to overlap, expects [200, 200], 3 photos, and on-disk names equal referenced names. Cleanup via delete is checked to leave uploads empty.</criterion>
+    <criterion id="6">met by reading; cannot confirm without running. Delete race (:161-175): after the holder's DELETE commits, FOR UPDATE finds no row under READ COMMITTED, so lock_log returns False and the edit raises 404 before any file is written. Test expects 404 "log not found" and an empty uploads dir.</criterion>
+    <criterion id="7">met by reading. Unknown id: _exists gives 404 at the endpoint; lock_log False also gives 404 before any write. test_unknown_id_returns_404_without_files covers it.</criterion>
+    <criterion id="8">met for the 422 paths by reading. Single inner try with "except Exception: conn.rollback(); raise" covers lock_log 404, remove_photos 422, count 422, file-write failure and DB failure, so the lock is released explicitly; the comment and the impl notes say explicit rollback and why. test_rejected_edits_release_the_lock checks lock release after both 422 types and after a success, with lock_timeout 3s. Gap (minor, not a bug): the 404 path and the file-write/DB failure paths have no lock-release test; the 404 path holds no row lock anyway.</criterion>
+    <criterion id="9">met by reading; the existing suite was not run. Old files are unlinked only after the with-block and commit (routes.py:170-176); the outer except removes `written` files on any failure, with per-file OSError logging so it does not mask the original error. Kept order and updated_at are unchanged from the previous code. The 404 branch for current is None was removed; this is safe because the row is locked and cannot disappear.</criterion>
+    <criterion id="10">met. lock_log is in database.py, plain SQL with %s, no commit. No new dependencies.</criterion>
+    <criterion id="11">met by reading. Tests use the env fixture (TEST_DATABASE_URL, tmp_path uploads) and the conftest guards; no port is used (TestClient); no reference to dailylog or the real uploads/. wait_blocked polls with a 15s deadline using Event.wait(0.02) (a poll interval, not synchronisation by sleep). Call.finish joins with a 15s timeout and asserts not alive. Threads are daemon, so a stuck one cannot block interpreter exit. The holder context manager always rolls back and closes.</criterion>
+    <criterion id="12">met. specs.md adds the serialization note with the 422/404 outcomes in the status-codes section; the contract is unchanged. README only gets a test-file table row (harmless).</criterion>
+  </criteria>
+  <focus_points>
+    <point id="a">FOR UPDATE is the first statement on the connection (database.connect only opens it, assuming no prior statements in connect). The lock comes before get_log (the photo read).</point>
+    <point id="b">Every exit path from the inner try rolls back (explicit), and the connection is closed by closing(). New files are removed by the outer except on every failure path including HTTPException; writes are registered in `written` before the open. A failure of lock_log itself (e.g. a DB error) is inside the try too.</point>
+    <point id="c">Old files are deleted after the with-block (commit done) and only on the success path, since an exception re-raises before that code.</point>
+    <point id="d">The pg_stat_activity query is scoped with datname = current_database() on a connection to the test DB and excludes its own pid. It counts any Lock waiter in that DB. Can it false-positive? Only if some other session waits on a lock in the test database; in these tests the only possible waiters are the edit threads (the holder never waits), so it is sound. Tuple-lock waiters (the second queued edit) also show wait_event_type='Lock', so n=2 is reachable. Cannot hang: 15s deadline. A very fast waiter that has not yet started its query would just be polled again. Residual risk: the request thread could be counted as blocked while waiting on something unrelated, but nothing else locks in these flows.</point>
+    <point id="e">No real DB, uploads/ or port 8000 touched, by reading.</point>
+    <point id="f">No behaviour beyond the spec seen; line lengths under 100; imports used (threading, time, contextmanager, psycopg, make_image, make_log, put, rows, snapshot all referenced). No pyflakes to confirm.</point>
+  </focus_points>
+  <test_results>
+    <result>.venv/Scripts/python.exe -m py_compile routes.py database.py tests/test_concurrent_update.py -> ok</result>
+    <result>pyflakes -> not installed, not run</result>
+    <result>pytest -> NOT RUN by user's instruction</result>
+  </test_results>
+  <runtime_check result="no">
+    Something runnable exists (API and tests) but by the user's decision no database, server or test was started. Nothing was executed beyond py_compile.
+  </runtime_check>
+  <bugs/>
+  <self_critique>
+    Everything about runtime behaviour is unverified. Main unconfirmed risks: (1) TestClient used from several threads at once may serialize requests so that the two-waiter wait_blocked(db, 2) never reaches 2 and the tests fail by timeout (a test-mechanics failure, not a lock defect); (2) the shared `holder` for tests that start two threads relies on both requests having passed _exists before blocking; (3) the implementation notes say 7 tests but there are 8 (documentation nit). The 404 and file-write/DB-failure lock-release paths have no direct test.
+  </self_critique>
+</verification>
