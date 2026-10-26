@@ -1,4 +1,5 @@
 """Tests for creating, listing, updating and deleting log entries."""
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -22,7 +23,8 @@ def test_create_ok_response_and_storage(env):
     assert body["photos"][0].startswith("uploads/")
     logs, photos = rows(db)
     assert len(logs) == 1 and len(photos) == 1
-    assert logs[0]["description"] == "hello" and logs[0]["created_at"] == logs[0]["updated_at"] == body["created_at"]
+    assert logs[0]["description"] == "hello" and logs[0]["created_at"] == logs[0]["updated_at"]
+    assert logs[0]["created_at"] == datetime.fromisoformat(body["created_at"])
     assert photos[0]["path"] == body["photos"][0]
 
 

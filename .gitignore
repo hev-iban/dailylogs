@@ -13,9 +13,6 @@ uploads/
 # Local secrets
 .env
 
-# Claude Code tooling (a separate git repository)
-.claude/
-
 # Editors and OS files
 .vscode/
 .idea/

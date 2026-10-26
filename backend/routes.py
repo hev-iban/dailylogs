@@ -16,7 +16,7 @@ import warnings
 from contextlib import closing
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 from PIL import Image
@@ -24,9 +24,10 @@ from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
 import database
-from models import (ALLOWED_EXTENSIONS, ALLOWED_FORMATS, MAX_DESCRIPTION_CHARS,
-                    MAX_PHOTO_BYTES, MAX_PHOTOS, MIN_PHOTOS, UPLOADS_URL_PREFIX,
-                    DescriptionIn, LogOut)
+from models import (ALLOWED_EXTENSIONS, ALLOWED_FORMATS, DEFAULT_LIST_LIMIT,
+                    MAX_DESCRIPTION_CHARS, MAX_LIST_LIMIT, MAX_LIST_OFFSET,
+                    MAX_PHOTO_BYTES,
+                    MAX_PHOTOS, MIN_PHOTOS, UPLOADS_URL_PREFIX, DescriptionIn, LogOut)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
@@ -106,8 +107,8 @@ def _store(database_url, uploads_dir, description, blobs, exts) -> dict:
             with open(target, "xb") as fh:
                 fh.write(data)
             names.append(f"{UPLOADS_URL_PREFIX}/{name}")
-        # Always server-generated; fixed microsecond precision keeps ordering uniform.
-        now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        # Always server-generated.
+        now = datetime.now(timezone.utc)
         with closing(database.connect(database_url)) as conn:
             try:
                 result = database.insert_log(conn, description, names, now)
@@ -129,35 +130,40 @@ def _update(database_url, uploads_dir, log_id, description, remove, blobs, exts)
     """Validate against the stored photos, write new files, commit, then delete old files.
 
     Old files go only after the commit; on any failure the new files are removed.
+    The log row is locked first (before the photos are read) and the lock is held until
+    the commit or the explicit rollback, so concurrent edits of one log run one after
+    the other and each sees the photos the previous one committed.
     """
     written = []
     try:
         with closing(database.connect(database_url)) as conn:
-            current = database.get_log(conn, log_id)
-            if current is None:
-                raise HTTPException(404, "log not found")
-            if not remove <= set(current["photos"]):
-                raise HTTPException(422, "remove_photos must be photos of this log")
-            kept = [p for p in current["photos"] if p not in remove]
-            if not MIN_PHOTOS <= len(kept) + len(blobs) <= MAX_PHOTOS:
-                raise HTTPException(
-                    422, f"a log needs between {MIN_PHOTOS} and {MAX_PHOTOS} photos")
-            uploads_dir.mkdir(parents=True, exist_ok=True)
-            names = []
-            for data, ext in zip(blobs, exts):
-                name = f"{uuid.uuid4().hex}{ext}"
-                target = uploads_dir / name
-                written.append(target)  # registered before write so partial files are removed
-                with open(target, "xb") as fh:
-                    fh.write(data)
-                names.append(f"{UPLOADS_URL_PREFIX}/{name}")
-            now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
             try:
+                if not database.lock_log(conn, log_id):
+                    raise HTTPException(404, "log not found")
+                current = database.get_log(conn, log_id)
+                if not remove <= set(current["photos"]):
+                    raise HTTPException(422, "remove_photos must be photos of this log")
+                kept = [p for p in current["photos"] if p not in remove]
+                if not MIN_PHOTOS <= len(kept) + len(blobs) <= MAX_PHOTOS:
+                    raise HTTPException(
+                        422, f"a log needs between {MIN_PHOTOS} and {MAX_PHOTOS} photos")
+                uploads_dir.mkdir(parents=True, exist_ok=True)
+                names = []
+                for data, ext in zip(blobs, exts):
+                    name = f"{uuid.uuid4().hex}{ext}"
+                    target = uploads_dir / name
+                    written.append(target)  # registered before write so partial files are removed
+                    with open(target, "xb") as fh:
+                        fh.write(data)
+                    names.append(f"{UPLOADS_URL_PREFIX}/{name}")
+                now = datetime.now(timezone.utc)
                 result = database.update_log(conn, log_id, description, kept + names, now)
                 if result is None:
                     raise HTTPException(404, "log not found")
                 conn.commit()
             except Exception:
+                # Explicit rollback on every early exit and failure: releases the row lock
+                # at once instead of relying on the close in the with-block.
                 conn.rollback()
                 raise
     except Exception:
@@ -211,15 +217,19 @@ def _exists(database_url, log_id) -> bool:
         return database.get_log(conn, log_id) is not None
 
 
-def _list(database_url) -> list[dict]:
+def _list(database_url, limit, offset) -> list[dict]:
     with closing(database.connect(database_url)) as conn:
-        return database.list_logs(conn)
+        return database.list_logs(conn, limit, offset)
 
 
 @router.get("/logs", response_model=list[LogOut])
-async def list_logs(request: Request):
+async def list_logs(request: Request, limit: int = Query(DEFAULT_LIST_LIMIT, ge=1),
+                    offset: int = Query(0, ge=0, le=MAX_LIST_OFFSET)):
+    # limit below 1 or non-integer: 422; above the maximum: clamped.
+    # offset below 0, non-integer or beyond the database's bigint: 422.
+    limit = min(limit, MAX_LIST_LIMIT)
     try:
-        return await run_in_threadpool(_list, request.app.state.database_url)
+        return await run_in_threadpool(_list, request.app.state.database_url, limit, offset)
     except Exception:
         logger.exception("list_logs failed")
         return JSONResponse({"detail": "internal server error"}, status_code=500)

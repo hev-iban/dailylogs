@@ -74,6 +74,12 @@ pip install -r requirements.txt
 
 The tables are created automatically on first start.
 
+**Back up before upgrading.** Older versions stored `created_at` / `updated_at` as TEXT. On
+start the app converts them to `TIMESTAMPTZ` automatically, in one transaction (a bad value
+aborts the start and changes nothing). Before the first start on a real database, back it up:
+`pg_dump -U postgres dailylog > dailylog-backup.sql` (for Docker, run `pg_dump` inside the
+database container). To roll back, restore that dump.
+
 ## Run
 
 ```bash
@@ -97,7 +103,7 @@ TEST_DATABASE_URL=postgresql://postgres@localhost:5432/dailylog_test python -m p
 The tests use the `_test` database and a temporary uploads folder, so they never touch your real entries.
 A guard in `conftest.py` fails the run if your real `uploads/` change.
 
-GitHub Actions runs the same suite on pushes to `main` and on pull requests
+GitHub Actions runs the same suite on every push, to any branch, and on pull requests
 (`.github/workflows/tests.yml`).
 
 | File | Covers |
@@ -108,8 +114,12 @@ GitHub Actions runs the same suite on pushes to `main` and on pull requests
 | `test_logs.py` | Creating, listing, updating and deleting entries |
 | `test_photos.py` | Photo uploads, file paths, image serving, multiple photos |
 | `test_validation.py` | Descriptions, formats, file sizes, invalid image data |
+| `test_concurrent_update.py` | Row locking of edits: blocking, validation against committed photos, no stray files |
 | `test_description_model.py` | The Pydantic description model: trimming, character counting, error messages |
 | `test_database.py` | PostgreSQL persistence, ordering, rollback, missing `DATABASE_URL`, log and photo relationships |
+| `test_list_limit.py` | `GET /api/logs?limit=`: default of 5, custom limit, clamping to 20, 422 cases, newest first, photos per log |
+| `test_list_offset.py` | `GET /api/logs?offset=`: paging without overlap, newest first, past the end, 422 cases, photos per page |
+| `test_timestamps.py` | TEXT to TIMESTAMPTZ migration (all or nothing, safe to rerun), UTC output format, chronological ordering across offsets |
 
 ## Project structure
 
