@@ -294,11 +294,27 @@ function showError(message) {
   loadError.hidden = false;
 }
 
-async function loadLogs() {
+// Paging: the API has no total, so ask for one extra log; a 6th means an older page exists.
+const PAGE_SIZE = 5;
+const prevButton = document.getElementById("prev-button");
+const nextButton = document.getElementById("next-button");
+let currentPage = 0;     // zero-based page that is shown (or was last shown)
+let hasNextPage = false;
+let loadSeq = 0;         // only the latest request may change the view
+
+function syncPager(loading) {
+  prevButton.disabled = loading || currentPage === 0;
+  nextButton.disabled = loading || !hasNextPage;
+}
+
+async function loadPage(page) {
+  const seq = ++loadSeq;
   loadError.hidden = true;
   loadError.textContent = "";
+  syncPager(true);
   try {
-    const response = await fetch("/api/logs");
+    const query = "?limit=" + (PAGE_SIZE + 1) + "&offset=" + page * PAGE_SIZE;
+    const response = await fetch("/api/logs" + query);
     if (!response.ok) {
       throw new Error("the server returned HTTP " + response.status);
     }
@@ -306,8 +322,20 @@ async function loadLogs() {
     if (!Array.isArray(logs)) {
       throw new Error("the server sent an unexpected response");
     }
-    renderLogs(logs);
+    if (seq !== loadSeq) {
+      return;
+    }
+    if (logs.length === 0 && page > 0) {
+      await loadPage(page - 1);  // the page emptied (e.g. after a delete): step back
+      return;
+    }
+    currentPage = page;
+    hasNextPage = logs.length > PAGE_SIZE;
+    renderLogs(logs.slice(0, PAGE_SIZE));
   } catch (err) {
+    if (seq !== loadSeq) {
+      return;
+    }
     let detail = err.message;
     if (err instanceof TypeError) {
       detail = "could not reach the server";
@@ -315,8 +343,27 @@ async function loadLogs() {
       detail = "the server sent an unexpected response";
     }
     showError("Couldn't load your logs: " + detail + ". Reload the page or try again later.");
+  } finally {
+    if (seq === loadSeq) {
+      syncPager(false);
+    }
   }
 }
+
+function loadLogs() {
+  return loadPage(currentPage);  // reload the page that is shown
+}
+
+prevButton.addEventListener("click", () => {
+  if (!prevButton.disabled && currentPage > 0) {
+    loadPage(currentPage - 1);
+  }
+});
+nextButton.addEventListener("click", () => {
+  if (!nextButton.disabled && hasNextPage) {
+    loadPage(currentPage + 1);
+  }
+});
 
 const logForm = document.getElementById("log-form");
 const formError = document.getElementById("form-error");
@@ -401,7 +448,7 @@ async function saveLog(event) {
     }
     logForm.reset();
     refreshCreateLimit();  // reset fires no input event
-    await loadLogs();
+    await loadPage(0);  // a new log is the newest, so show page 1
   } catch (err) {
     showFormError(networkMessage("Couldn't save your log"));
   } finally {

@@ -74,6 +74,12 @@ pip install -r requirements.txt
 
 The tables are created automatically on first start.
 
+**Back up before upgrading.** Older versions stored `created_at` / `updated_at` as TEXT. On
+start the app converts them to `TIMESTAMPTZ` automatically, in one transaction (a bad value
+aborts the start and changes nothing). Before the first start on a real database, back it up:
+`pg_dump -U postgres dailylog > dailylog-backup.sql` (for Docker, run `pg_dump` inside the
+database container). To roll back, restore that dump.
+
 ## Run
 
 ```bash

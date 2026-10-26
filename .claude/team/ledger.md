@@ -20,3 +20,6 @@ T019 | pipeline | user-verified | done
 T020 | direct | user-verified | done
 T021 | pipeline | user-verified | done
 T022 | direct | user-verified | done
+T023 | pipeline | user-verified | done
+T024 | pipeline | user-verified | done
+T025 | pipeline | user-verified | done

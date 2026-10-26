@@ -9,7 +9,7 @@ runs locally, so there is no login or logout.
 | Layer | Choice |
 |---|---|
 | Backend | Python, FastAPI (API), Pydantic (description validation), Pillow (image checks) |
-| Database | PostgreSQL (descriptions, timestamps, photo paths) |
+| Database | PostgreSQL (descriptions, timezone-aware timestamps, photo paths) |
 | Photo storage | `uploads/` folder on disk (a named volume when run with Docker) |
 | Frontend | HTML, CSS, JavaScript, talking to the backend over HTTP |
 | Tests | pytest |
@@ -17,7 +17,7 @@ runs locally, so there is no login or logout.
 ## Core features
 
 1. **Create a log**: a description and 1 to 5 photos are required.
-2. **View logs**: all entries, newest first, each showing its date, description, and photos.
+2. **View logs**: the newest entries first (5 per page, at most 20 through the API); Previous and Next buttons below the list page through older and newer logs, newest first on every page, each showing its date, description, and photos.
 3. **Edit a log**: change the description, remove photos, and add photos in one request.
 4. **Delete a log**: removes the entry and its photo files from disk.
 5. **Automatic timestamps**: `created_at` is set on create; `updated_at` is set on create
@@ -67,11 +67,26 @@ Create and edit take `multipart/form-data`. All other responses are JSON, except
 | `GET` | `/` | The web page | 200 |
 | `GET` | `/static/{file}` | Frontend files (`style.css`, `app.js`) | 200 |
 | `GET` | `/uploads/{file}` | A stored photo | 200 |
-| `GET` | `/api/logs` | List all logs, newest first | 200 |
+| `GET` | `/api/logs` | List the newest logs, newest first. Optional queries `limit` (default 5, max 20) and `offset` (default 0) | 200 |
 | `POST` | `/api/logs` | Create a log. Fields: `description`, `photos` (1 to 5 files) | 201 |
 | `PUT` | `/api/logs/{id}` | Edit a log. Fields: `description`, `remove_photos` (repeatable photo paths), `photos` (new files, optional) | 200 |
 | `DELETE` | `/api/logs/{id}` | Delete a log and its photos | 204 |
 
+- `GET /api/logs?limit=N` returns the `N` newest logs (ordered by `created_at`, then `id`,
+  both descending) as a bare JSON list. Default 5. A `limit` above 20 is clamped to 20. A
+  `limit` below 1 or not an integer returns 422. Photos are read only for the returned
+  logs.
+- `GET /api/logs?offset=K` skips the `K` newest logs (same ordering) and returns the next
+  `limit` logs, so `offset=5` is the second page of 5. `offset` defaults to 0 (same as
+  absent). It must be an integer from 0 up to 9223372036854775807; a negative, non-integer
+  or larger value returns 422. An offset at or past the number of logs returns `[]`. The
+  response stays a bare list: no total count or envelope.
+- The page shows 5 logs at a time. Page 1 is the newest. The page asks for 6 and shows 5; a
+  6th log means Next is enabled. Previous is disabled on page 1. Both buttons are disabled
+  while a page loads and when everything fits on one page. Creating a log returns to page 1,
+  editing keeps the page, deleting reloads the page (stepping back one page if it is now
+  empty), and paging closes an open edit form. Reloading the browser returns to page 1.
+  Offset paging can repeat or skip a log if logs change between page loads.
 - An unknown log id returns 404 `log not found`. A non-integer id returns 422.
 - On edit, a `remove_photos` value that is not a photo of that log returns 422
   `remove_photos must be photos of this log`.
@@ -111,13 +126,15 @@ Example log:
 ```
 
 Photo paths are relative; the page loads them from `/uploads/<file>`. Timestamps are set by
-the server in UTC and shown in local time by the frontend. Logs with the same `created_at`
+the server in UTC and shown in local time by the frontend. Timestamps are stored as
+`TIMESTAMPTZ` and always returned as UTC text with a `+00:00` suffix and six fractional digits,
+whatever the database time zone. Logs are ordered by the real instant; logs with the same `created_at`
 are ordered by higher `id` first.
 
 ## Data model
 
 ```
-logs    (id, description, created_at, updated_at)
+logs    (id, description, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ)
 photos  (id, log_id -> logs.id ON DELETE CASCADE, path, position)
 ```
 
