@@ -23,3 +23,5 @@ T022 | direct | user-verified | done
 T023 | pipeline | user-verified | done
 T024 | pipeline | user-verified | done
 T025 | pipeline | user-verified | done
+T026 | direct | user review | passed
+T027 | direct | user review | passed
