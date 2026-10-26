@@ -107,8 +107,8 @@ def _store(database_url, uploads_dir, description, blobs, exts) -> dict:
             with open(target, "xb") as fh:
                 fh.write(data)
             names.append(f"{UPLOADS_URL_PREFIX}/{name}")
-        # Always server-generated; fixed microsecond precision keeps ordering uniform.
-        now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        # Always server-generated.
+        now = datetime.now(timezone.utc)
         with closing(database.connect(database_url)) as conn:
             try:
                 result = database.insert_log(conn, description, names, now)
@@ -156,7 +156,7 @@ def _update(database_url, uploads_dir, log_id, description, remove, blobs, exts)
                     with open(target, "xb") as fh:
                         fh.write(data)
                     names.append(f"{UPLOADS_URL_PREFIX}/{name}")
-                now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+                now = datetime.now(timezone.utc)
                 result = database.update_log(conn, log_id, description, kept + names, now)
                 if result is None:
                     raise HTTPException(404, "log not found")

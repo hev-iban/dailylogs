@@ -266,6 +266,25 @@ button {
   min-width: 100px;
 }
 
+.pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+#prev-button,
+#next-button {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+#prev-button:active,
+#next-button:active {
+  background: var(--ghost-active);
+}
+
 /* Pressed: immediate, no transition delay. */
 #save-button:active,
 .edit-save-button:active {
@@ -306,7 +325,9 @@ button:active:not(:disabled) {
     background: var(--danger-hover);
   }
 
-  .theme-toggle:hover {
+  .theme-toggle:hover,
+  #prev-button:enabled:hover,
+  #next-button:enabled:hover {
     background: var(--ghost-hover);
   }
 
@@ -325,7 +346,9 @@ button:active:not(:disabled) {
     background: var(--danger-active);
   }
 
-  .theme-toggle:active:hover {
+  .theme-toggle:active:hover,
+  #prev-button:enabled:active:hover,
+  #next-button:enabled:active:hover {
     background: var(--ghost-active);
   }
 

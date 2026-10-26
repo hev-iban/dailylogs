@@ -1,0 +1,62 @@
+<spec>
+  <user_stories>
+    <story>As the journal owner, I want logs ordered by the real instant they were created, so ordering stays correct even if stored timestamps carry different UTC offsets.</story>
+    <story>As the journal owner, I want my existing entries in the real `dailylog` database (and the Docker `pgdata` volume) converted automatically and without loss, so I do not have to migrate by hand.</story>
+    <story>As the journal owner, I want a failed migration to leave my data exactly as it was and stop the app with a clear message, so a bad row can never corrupt or half-convert my journal.</story>
+    <story>As an API/frontend consumer, I want timestamps in responses to look exactly as they do today, so nothing downstream changes.</story>
+    <story>As the journal owner, I want a README warning to back up before starting the app on a real database, because the migration runs automatically.</story>
+  </user_stories>
+  <acceptance_criteria>
+    <criterion n="1">On a fresh (empty) database, init_db creates logs.created_at and logs.updated_at as TIMESTAMPTZ (information_schema.columns data_type = 'timestamp with time zone'), NOT NULL.</criterion>
+    <criterion n="2">On a database whose logs.created_at / updated_at are TEXT, init_db converts both columns to TIMESTAMPTZ. Afterwards the row count of logs and photos is unchanged, ids, descriptions and photo rows are unchanged, and every converted value denotes the same instant as the original text (including rows written with non-UTC offsets, e.g. "2026-01-01T10:00:00+05:00" becomes 2026-01-01 05:00:00 UTC).</criterion>
+    <criterion n="3">The migration is idempotent: running init_db a second (and third) time on an already-migrated database changes nothing (no error, no data change, types still TIMESTAMPTZ). A column already TIMESTAMPTZ is never altered.</criterion>
+    <criterion n="4">The migration is atomic: if any row in either column cannot be parsed as a timestamp, init_db raises an error whose message identifies the problem (clear enough to tell the user the migration failed and that no data was changed), and afterwards BOTH columns are still TEXT with every original row and value byte-identical (neither column is half-converted). The app therefore refuses to start (lifespan fails) rather than running on a partly migrated schema.</criterion>
+    <criterion n="5">Legacy text values lacking an explicit offset are interpreted as UTC during migration, independent of the server or session TimeZone setting (the app only ever wrote "+00:00" values, so this is the only consistent reading). Testable: with the session/server TimeZone set to a non-UTC zone, an offsetless legacy value migrates to the same instant as the same value with "+00:00".</criterion>
+    <criterion n="6">The migration runs automatically inside the existing startup path (init_db at app startup and in the test fixture); no new dependency, no separate tool, no manual step is required.</criterion>
+    <criterion n="7">New timestamps (create and edit) are timezone-aware UTC values written to the database as datetime objects, not strings. created_at never changes on edit; updated_at is refreshed on edit (existing behavior preserved).</criterion>
+    <criterion n="8">API response format is unchanged: for every endpoint returning a log (GET /api/logs, POST /api/logs, PUT /api/logs/{id}, and any other returning created_at/updated_at), created_at and updated_at are strings of the form YYYY-MM-DDTHH:MM:SS.ffffff+00:00 (UTC, "+00:00" suffix, six fractional digits always present, including when microseconds are 0). The POST/PUT response value equals the value a subsequent GET returns for the same log.</criterion>
+    <criterion n="9">Criterion 8 holds when the PostgreSQL session/server TimeZone is a non-UTC zone (e.g. 'Asia/Tokyo' or 'America/New_York'): output is still UTC with "+00:00", not the session zone's offset. Verified by a test that runs under a non-UTC time zone.</criterion>
+    <criterion n="10">Ordering is chronological: logs inserted (directly into the table) with timestamps carrying different UTC offsets, where text order and time order disagree (e.g. "2026-01-01T10:00:00+05:00" = 05:00 UTC is earlier than "2026-01-01T06:00:00+00:00"), are returned by GET /api/logs newest-actual-instant first; ties on the same instant still break by higher id first. limit/offset paging behavior from T023/T024 is unchanged.</criterion>
+    <criterion n="11">The full existing test suite passes unchanged in behavior (tests may be adjusted only where they assumed TEXT column types), run against TEST_DATABASE_URL only, including when the test database still has TEXT columns left from earlier runs (the migration converts them).</criterion>
+    <criterion n="12">New automated tests cover: (a) migration of a TEXT-column table with rows at different offsets, checking types, instants and unchanged row counts; (b) idempotency; (c) a bad text value makes init_db fail with nothing changed; (d) chronological ordering across offsets; (e) response format under a non-UTC time zone; (f) offsetless legacy value read as UTC. Every test touching the schema operates only on the `_test` database.</criterion>
+    <criterion n="13">specs.md is updated where it describes storage and timestamps (data model lists timestamps as timezone-aware; response format statement unchanged). README.md database section states that the app migrates TEXT timestamps to TIMESTAMPTZ automatically on first start, and tells the user to back up first (e.g. pg_dump of `dailylog`, and the Docker database if used) before starting the app on a real database.</criterion>
+    <criterion n="14">Safety of real data: no test, script or verification step connects to the real `dailylog` database, starts the app against it, uses port 8000, or touches the real uploads/ folder or Docker volumes. The migration of the real database happens only when the user themselves starts the app after backing up. The existing `_test` name guard and uploads guard in conftest.py are not weakened.</criterion>
+  </acceptance_criteria>
+  <assumptions>
+    <assumption>Only logs.created_at and logs.updated_at are timestamp columns; the photos table has none.</assumption>
+    <assumption>All legacy text values were written by the app as UTC ISO-8601 strings with "+00:00" and microseconds; offsetless values are not expected but, if present, are treated as UTC (criterion 5).</assumption>
+    <assumption>Migrating the real database: it happens automatically in init_db the first time the user starts the app after this change (local `dailylog` and the Docker `pgdata` volume each migrate when the app/container first connects to them). Protection: (1) a single transaction, so any failure rolls everything back and the app stops with a clear error (criterion 4); (2) idempotent, only acts on columns still TEXT (criterion 3); (3) README backup instruction (pg_dump) before first start (criterion 13); (4) all development and verification confined to the `_test` database (criterion 14). Rollback path for the user is restoring that pg_dump.</assumption>
+    <assumption>The conversion rewrites the table and briefly takes an exclusive lock; acceptable for a single-user app at journaling scale.</assumption>
+    <assumption>The response stays a string (LogOut keeps str fields); the exact format is preserved rather than switching to ISO output of a datetime type, which could differ (e.g. "Z", missing microseconds).</assumption>
+    <assumption>No new features, no new dependencies (no Alembic). The migration is not reversible by code; reversal is by restoring the backup.</assumption>
+    <assumption>The frontend needs no change because the response format is identical.</assumption>
+  </assumptions>
+  <edge_cases>
+    <case>Timestamps with different offsets (+05:00, -08:00, +00:00) in the same table, ordering by instant.</case>
+    <case>Two logs with the same instant but expressed with different offsets: tie breaks by higher id first.</case>
+    <case>Microseconds equal to 0 must still render ".000000".</case>
+    <case>Empty logs table with TEXT columns: migration succeeds and converts the types.</case>
+    <case>Only one of the two columns is TEXT (e.g. an earlier interrupted state): the TEXT one is converted, the other is left alone.</case>
+    <case>An unparsable or empty-string legacy value in either column: whole migration fails, nothing changes.</case>
+    <case>Non-UTC server or session TimeZone during migration, reads, and writes.</case>
+    <case>Rows with photos (foreign key photos.log_id) survive migration with their photo rows intact.</case>
+    <case>Two app instances starting at once (e.g. reload): the second sees either TEXT (waits on the lock then finds it already converted) or TIMESTAMPTZ, and must not fail or double-convert.</case>
+    <case>Existing test database holds TEXT columns from earlier runs.</case>
+  </edge_cases>
+  <risks>
+    <risk severity="high">Migration runs automatically against the user's real data; a bug or unexpected legacy value could block startup or alter instants. Mitigation: atomic transaction, backup instruction, thorough test coverage on the test DB.</risk>
+    <risk severity="medium">Time-zone leakage: psycopg returns datetimes in the session TimeZone, so output could silently change from "+00:00" to a local offset on a non-UTC machine. Covered by criterion 9.</risk>
+    <risk severity="medium">Offsetless text would be interpreted in the session zone by a naive cast; criterion 5 requires UTC.</risk>
+    <risk severity="low">Existing tests that compare raw DB values (e.g. via the rows() helper) as strings may need adjustment now that columns return datetimes.</risk>
+    <risk severity="low">The exclusive lock during ALTER may briefly block a concurrently starting instance.</risk>
+  </risks>
+  <dependencies>
+    <dep>PostgreSQL (existing; TIMESTAMPTZ and transactional DDL are standard).</dep>
+    <dep>psycopg (existing, pinned); no new packages.</dep>
+    <dep>Files: backend/database.py, backend/routes.py, backend/tests/conftest.py and tests, specs.md, README.md.</dep>
+    <dep>TEST_DATABASE_URL pointing at a `_test` database for all verification.</dep>
+  </dependencies>
+  <self_critique>
+    Every story maps to criteria: ordering (10), real-data migration (2-6, 13, 14), failure safety (4), format (8, 9), README (13). All criteria are observable via DB metadata queries, row comparisons or API responses. The biggest uncertainty is whether real legacy rows contain any value that fails the cast (e.g. hand-edited rows); that is only knowable by running against real data, which is forbidden here, so safety rests on atomic rollback plus the user's backup. A second uncertainty is how bad-row failure surfaces to the user, kept to a clear error message without prescribing the mechanism.
+  </self_critique>
+</spec>
