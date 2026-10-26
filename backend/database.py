@@ -92,6 +92,17 @@ def get_log(conn: psycopg.Connection, log_id: int) -> dict | None:
     }
 
 
+def lock_log(conn: psycopg.Connection, log_id: int) -> bool:
+    """Take the row lock on a log (SELECT ... FOR UPDATE); False if the id is unknown.
+
+    Blocks while another transaction holds the row. The lock lasts until the caller's
+    commit or rollback. Run it as the first statement of the transaction, before reading
+    the photo rows. Does not commit; the caller owns the transaction.
+    """
+    row = conn.execute("SELECT id FROM logs WHERE id = %s FOR UPDATE", (log_id,)).fetchone()
+    return row is not None
+
+
 def delete_log(conn: psycopg.Connection, log_id: int) -> list[str] | None:
     """Delete a log; its photo rows go with it (ON DELETE CASCADE).
 

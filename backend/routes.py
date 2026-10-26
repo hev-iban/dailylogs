@@ -129,35 +129,40 @@ def _update(database_url, uploads_dir, log_id, description, remove, blobs, exts)
     """Validate against the stored photos, write new files, commit, then delete old files.
 
     Old files go only after the commit; on any failure the new files are removed.
+    The log row is locked first (before the photos are read) and the lock is held until
+    the commit or the explicit rollback, so concurrent edits of one log run one after
+    the other and each sees the photos the previous one committed.
     """
     written = []
     try:
         with closing(database.connect(database_url)) as conn:
-            current = database.get_log(conn, log_id)
-            if current is None:
-                raise HTTPException(404, "log not found")
-            if not remove <= set(current["photos"]):
-                raise HTTPException(422, "remove_photos must be photos of this log")
-            kept = [p for p in current["photos"] if p not in remove]
-            if not MIN_PHOTOS <= len(kept) + len(blobs) <= MAX_PHOTOS:
-                raise HTTPException(
-                    422, f"a log needs between {MIN_PHOTOS} and {MAX_PHOTOS} photos")
-            uploads_dir.mkdir(parents=True, exist_ok=True)
-            names = []
-            for data, ext in zip(blobs, exts):
-                name = f"{uuid.uuid4().hex}{ext}"
-                target = uploads_dir / name
-                written.append(target)  # registered before write so partial files are removed
-                with open(target, "xb") as fh:
-                    fh.write(data)
-                names.append(f"{UPLOADS_URL_PREFIX}/{name}")
-            now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
             try:
+                if not database.lock_log(conn, log_id):
+                    raise HTTPException(404, "log not found")
+                current = database.get_log(conn, log_id)
+                if not remove <= set(current["photos"]):
+                    raise HTTPException(422, "remove_photos must be photos of this log")
+                kept = [p for p in current["photos"] if p not in remove]
+                if not MIN_PHOTOS <= len(kept) + len(blobs) <= MAX_PHOTOS:
+                    raise HTTPException(
+                        422, f"a log needs between {MIN_PHOTOS} and {MAX_PHOTOS} photos")
+                uploads_dir.mkdir(parents=True, exist_ok=True)
+                names = []
+                for data, ext in zip(blobs, exts):
+                    name = f"{uuid.uuid4().hex}{ext}"
+                    target = uploads_dir / name
+                    written.append(target)  # registered before write so partial files are removed
+                    with open(target, "xb") as fh:
+                        fh.write(data)
+                    names.append(f"{UPLOADS_URL_PREFIX}/{name}")
+                now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
                 result = database.update_log(conn, log_id, description, kept + names, now)
                 if result is None:
                     raise HTTPException(404, "log not found")
                 conn.commit()
             except Exception:
+                # Explicit rollback on every early exit and failure: releases the row lock
+                # at once instead of relying on the close in the with-block.
                 conn.rollback()
                 raise
     except Exception:

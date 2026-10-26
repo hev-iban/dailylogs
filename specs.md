@@ -75,6 +75,11 @@ Create and edit take `multipart/form-data`. All other responses are JSON, except
 - An unknown log id returns 404 `log not found`. A non-integer id returns 422.
 - On edit, a `remove_photos` value that is not a photo of that log returns 422
   `remove_photos must be photos of this log`.
+- Concurrent edits of one log are serialized: an edit locks the log before reading its
+  photos, and the lock is held until the edit commits or fails. A later edit is validated
+  against the photos committed by the earlier one, so removing a photo the earlier edit
+  already removed returns 422 `remove_photos must be photos of this log`, and an edit of a
+  log deleted meanwhile returns 404 `log not found` and leaves no new files.
 - A missing photo, or any path outside `uploads/`, returns 404.
 
 Errors always have the form `{"detail": "<message>"}`. Examples:
